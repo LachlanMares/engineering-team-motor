@@ -1,0 +1,29 @@
+#######################################
+# Syntax Coloring Map for AtSerial
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+AtSerial	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+setInitial	KEYWORD2
+update   KEYWORD2
+sendResponse   KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+STX LITERAL1
+ETX LITERAL1
+ACK LITERAL1
+NAK LITERAL1
+ARDUINO_BUFFER_LENGTH LITERAL1
+HEADER_LENGTH LITERAL1
+FOOTER_LENGTH LITERAL1

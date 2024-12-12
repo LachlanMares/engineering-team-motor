@@ -1,0 +1,28 @@
+#######################################
+# Syntax Coloring Map for QuadratureEncoder
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+QuadratureEncoder	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+interruptUpdate KEYWORD2
+updateEncoder   KEYWORD2
+getEncoderDirection KEYWORD2
+getEncoderCount KEYWORD2
+getEncoderDelta KEYWORD2
+getEncoderVelocity  KEYWORD2
+setEncoderCount KEYWORD2
+getEncoderErrorCount    KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+

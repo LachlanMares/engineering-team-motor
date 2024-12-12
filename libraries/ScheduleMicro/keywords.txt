@@ -1,0 +1,27 @@
+#######################################
+# Syntax Coloring Map for ScheduleMicro
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+ScheduleMicro	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+start	KEYWORD2
+stop	KEYWORD2
+update	KEYWORD2
+enableTask	KEYWORD2
+disableTask	KEYWORD2
+editTime	KEYWORD2
+taskReady	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+
