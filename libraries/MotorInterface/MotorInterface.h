@@ -27,10 +27,13 @@
 
 #define DEFAULT_PULSE_ON_PERIOD 500
 #define DEFAULT_PULSE_INTERVAL  1000
+#define DEFAULT_RAMP_STEPS      50
 #define MINIMUM_PULSE_INTERVAL  500
 #define MAXIMUM_PULSE_INTERVAL  1000000
 #define FAULT_CHECK_INTERVAL    100000
 #define STATUS_INTERVAL         10000
+
+#define MAF_FILTER_LENGTH  10
 
 struct motor_command_struct {
   boolean direction;
@@ -67,12 +70,14 @@ struct motor_status_struct {
 struct encoder_status_struct {
   boolean direction;
   float velocity;
+  int angle_count;
+  float angle_radians;
   long count;
 };
 
 class MotorInterface : public QuadratureEncoder {
   public:
-    MotorInterface(unsigned long update_period_us);
+    MotorInterface(unsigned long update_period_us, int ppr);
     void Enable();
     void Disable();
     void Wake();
@@ -95,6 +100,7 @@ class MotorInterface : public QuadratureEncoder {
     void DecodeMicroStep();
 
     boolean _output_state;
+    float filter_buffer[MAF_FILTER_LENGTH];
     unsigned long _last_fault_check_micros, _fault_check_interval, _status_interval, _last_status_micros;
     unsigned long _last_pulse_on_micros, _last_pulse_off_micros, _last_micros;
 };

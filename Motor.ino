@@ -10,7 +10,7 @@ void initialiseMotor() {
 }
 
 void motor_encoder_interrupt() {
-  motor.interruptUpdateExternal(digitalRead(MOTOR_INT_PIN_A), digitalRead(MOTOR_INT_PIN_B));
+  motor.interruptUpdateABExternal(digitalRead(MOTOR_INT_PIN_A), digitalRead(MOTOR_INT_PIN_B));
 }
 
 void updateMotor() {

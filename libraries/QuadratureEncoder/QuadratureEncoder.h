@@ -6,6 +6,8 @@
 struct encoder_struct {
   bool direction;
   float velocity;
+  int angle_count;
+  float angle_radians;
   long count;
   long delta;
   unsigned long errors;
@@ -13,29 +15,27 @@ struct encoder_struct {
 
 class QuadratureEncoder{
         public:  
-                QuadratureEncoder(unsigned long micros_period);            
-               
-                encoder_struct encoder_status;
-
-                void interruptUpdateExternal(bool a, bool b);
+                QuadratureEncoder(unsigned long micros_period, int ppr);            
+                void interruptUpdateABExternal(bool a, bool b);
+                void interruptUpdateZExternal(bool z);
                 bool updateEncoder(unsigned long micros_now);
                 bool getEncoderDirection();
                 long getEncoderCount();
                 long getEncoderDelta();
+                int getEncoderAngleCount();
+                float getEncoderAngleRadians();
                 float getEncoderVelocity();
-                void setEncoderCount(long);
                 long getEncoderErrorCount();
-
-                encoder_struct getEncoderStatus();
     
         private:
-                uint8_t encoder_a_pin;
-                uint8_t encoder_b_pin;
                 uint8_t previous_state = 0;
+                int pulses_per_revolution;
+                int angle_count_int = 0;
                 float update_dt = 0.0;
                 long previous_encoder_count = 0;
                 unsigned long previous_micros_now = 0;
                 unsigned long update_micros_period = 0;
+                encoder_struct encoder_status;
 };
 
 #endif

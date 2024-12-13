@@ -1,6 +1,6 @@
 #include "MotorInterface.h"
 
-MotorInterface::MotorInterface(unsigned long update_period_us) : QuadratureEncoder(update_period_us)
+MotorInterface::MotorInterface(unsigned long update_period_us, int ppr) : QuadratureEncoder(update_period_us, ppr)
 {
     _output_state = false;
     _fault_check_interval = FAULT_CHECK_INTERVAL;
@@ -88,7 +88,7 @@ void MotorInterface::Reset() {
 }
 
 boolean MotorInterface::FaultStatus() {
-    return !digitalRead(FAULT_PIN);
+    return false; //!digitalRead(FAULT_PIN);
 }
 
 void MotorInterface::DecodeMicroStep() {
@@ -140,11 +140,9 @@ void MotorInterface::DecodeMicroStep() {
 }
 
 void MotorInterface::StartJob() {
-
     status_variables.fault = FaultStatus();
 
     if(status_variables.fault) {
-
         status_variables.running = false;
         Sleep();
         Disable();
@@ -163,42 +161,52 @@ void MotorInterface::StartJob() {
         _last_pulse_on_micros = 0;
         _last_pulse_off_micros = 0;
 
-        digitalWrite(SLEEP_PIN, HIGH);
-        digitalWrite(RESET_PIN, HIGH);
-        digitalWrite(ENABLE_PIN, LOW);
+        if (status_variables.sleep) {
+            Wake();
+            Reset();
+        }
+
+        if (!status_variables.enabled) {
+            Enable();
+        }
+
         digitalWrite(DIRECTION_PIN, status_variables.direction ? HIGH : LOW);
         digitalWrite(STEP_PIN, LOW);
         DecodeMicroStep();
 
         status_variables.pulse_interval = (command_variables.pulse_interval > MINIMUM_PULSE_INTERVAL && command_variables.pulse_interval < MAXIMUM_PULSE_INTERVAL) ? command_variables.pulse_interval : DEFAULT_PULSE_INTERVAL;
-        status_variables.pulse_on_period = (command_variables.pulse_on_period < command_variables.pulse_interval) ? command_variables.pulse_on_period : (long)(command_variables.pulse_interval/2);
+        status_variables.pulse_on_period = (command_variables.pulse_on_period < command_variables.pulse_interval && command_variables.pulse_on_period != 0) ? command_variables.pulse_on_period : (long)(status_variables.pulse_interval/2);
         status_variables.pulses_remaining = command_variables.pulses;
 
         if(status_variables.use_ramping) {
+            if (command_variables.ramping_steps == 0) {
+                command_variables.ramping_steps = DEFAULT_RAMP_STEPS;
+            }
+
             if(2 * command_variables.ramping_steps < status_variables.pulses_remaining) {
+                // There are enough steps remaining to use specified ramp 
                 status_variables.ramp_up_stop = status_variables.pulses_remaining - command_variables.ramping_steps;
                 status_variables.ramp_down_start = command_variables.ramping_steps;
 
             } else {
-                    status_variables.ramp_up_stop = (long)(status_variables.pulses_remaining / 2);
-                    status_variables.ramp_down_start = status_variables.ramp_up_stop - 1;
-                }
+                status_variables.ramp_up_stop = (long)(status_variables.pulses_remaining / 2);
+                status_variables.ramp_down_start = status_variables.ramp_up_stop - 1;
+            }
 
             status_variables.ramp_up_interval = status_variables.pulse_interval * 3;
             status_variables.ramp_pulse_interval = status_variables.ramp_up_interval;
             status_variables.ramp_down_interval = status_variables.pulse_interval;
             status_variables.ramp_interval_step = (long)((status_variables.ramp_up_interval - status_variables.ramp_down_interval) / command_variables.ramping_steps);
 
-        } else
-            {
-                status_variables.ramp_up_stop = 0;
-                status_variables.ramp_down_start = 0;
-                status_variables.ramp_up_interval = 0;
-                status_variables.ramp_down_interval = 0;
-                status_variables.ramp_interval_step = 0;
-                status_variables.ramp_pulse_interval = 0;
-            }
+        } else {
+            status_variables.ramp_up_stop = 0;
+            status_variables.ramp_down_start = 0;
+            status_variables.ramp_up_interval = 0;
+            status_variables.ramp_down_interval = 0;
+            status_variables.ramp_interval_step = 0;
+            status_variables.ramp_pulse_interval = 0;
         }
+    }
 }
 
 void MotorInterface::PauseJob() {
@@ -223,22 +231,32 @@ void MotorInterface::ResetJobId() {
 }
 
 boolean MotorInterface::Update(unsigned long micros_now) {
-    
     if (updateEncoder(micros_now)) {
         encoder.direction = getEncoderDirection();
-        encoder.velocity = getEncoderVelocity();
         encoder.count = getEncoderCount();
+        encoder.angle_count = getEncoderAngleCount();
+        encoder.angle_radians = getEncoderAngleRadians();
+        float velocity_sum = 0.0;
+
+        // Basic moving average filter, move previous readings
+        for (uint8_t i=1; i<MAF_FILTER_LENGTH; i++) {
+            filter_buffer[i-1] = filter_buffer[i]; 
+            velocity_sum += filter_buffer[i-1];
+        }
+
+        filter_buffer[MAF_FILTER_LENGTH-1] = getEncoderVelocity();
+        encoder.velocity = (velocity_sum + filter_buffer[MAF_FILTER_LENGTH-1]) / MAF_FILTER_LENGTH;
     }
 
     boolean job_done = false;
 
     if(status_variables.enabled) {
+        
         if(status_variables.running && !status_variables.paused && !status_variables.fault) {
 
             if(status_variables.pulses_remaining > 0) {
 
                 if(status_variables.use_ramping) {
-
                     if(!_output_state) {
 
                         if(abs(micros_now - _last_pulse_on_micros) >= status_variables.ramp_pulse_interval) {
