@@ -69,8 +69,8 @@ struct motor_status_struct {
 
 struct encoder_status_struct {
   boolean direction;
-  float velocity;
   int angle_count;
+  float velocity_radians;
   float angle_radians;
   long count;
 };

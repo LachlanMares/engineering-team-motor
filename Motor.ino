@@ -15,6 +15,8 @@ void motor_encoder_interrupt() {
 
 void updateMotor() {
   if(motor.Update(micros())) {
+    uint8_t job_complete_buffer[2] = {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id};
+    serialport.sendMessage(&job_complete_buffer[0], 2);
     motor.ResetJobId();
   }
 }

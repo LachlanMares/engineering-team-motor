@@ -1,5 +1,6 @@
 #ifndef AtSerial_h
 #define AtSerial_h
+
 #include "Arduino.h"
 
 #define STX 0x02
@@ -10,16 +11,14 @@
 #define HEADER_LENGTH 2
 #define FOOTER_LENGTH 1
 
-class AtSerial
-{
-public:
-	AtSerial();
-	void setInitial(int, long, int);
-    int update(unsigned char*);
-    void sendMessage(unsigned char*, int);
+class AtSerial {
+	public:
+		AtSerial();
+		void setInitial(long baudrate, int timeout);
+    	int update(unsigned char* ext_buffer);
+    	void sendMessage(unsigned char* buffer_start, int msg_length);
 
-private:
-	int port_number, baudrate;
+	private:
 
 };
 

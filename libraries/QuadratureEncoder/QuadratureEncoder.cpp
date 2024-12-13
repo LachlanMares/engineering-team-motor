@@ -7,11 +7,12 @@ QuadratureEncoder::QuadratureEncoder(unsigned long encoder_update_period_us, int
   previous_micros_now = micros();
   previous_encoder_count = 0;
   pulses_per_revolution = ppr;
+  pulses_per_revolution_float = (float)(ppr);
   
-
   encoder_status.direction = true;
-  encoder_status.velocity = 0.0;
+  encoder_status.velocity_count = 0.0;
   encoder_status.angle_count = 0;
+  encoder_status.velocity_radians = 0.0;
   encoder_status.angle_radians = 0.0;
   encoder_status.count = 0;
   encoder_status.delta = 0;
@@ -80,20 +81,23 @@ void QuadratureEncoder::interruptUpdateABExternal(bool a, bool b) {
 bool QuadratureEncoder::updateEncoder(unsigned long micros_now) {
   if (abs(micros_now - previous_micros_now) >= update_micros_period) {
     encoder_status.delta = -(previous_encoder_count - encoder_status.count);  // Get number of pulses since last update
-    encoder_status.velocity = (float)(encoder_status.delta) / update_dt;  // Pulses per second
-    previous_encoder_count = encoder_status.count;  // Store variables for next time
-    previous_micros_now = micros_now;
+    encoder_status.velocity_count = (float)(encoder_status.delta) / update_dt;  // Pulses per second
     encoder_status.angle_count = (int)(encoder_status.count % pulses_per_revolution);
+    encoder_status.velocity_radians = ((float)(encoder_status.delta) / pulses_per_revolution_float) * 6.28318531;
 
     if (encoder_status.angle_count < 0) {
       encoder_status.angle_count = pulses_per_revolution + encoder_status.angle_count;
     }
 
-    encoder_status.angle_radians = ((float)(encoder_status.angle_count) / (float)(pulses_per_revolution)) * 6.28318531;
+    encoder_status.angle_radians = ((float)(encoder_status.angle_count) / pulses_per_revolution_float) * 6.28318531;
+    
+    previous_encoder_count = encoder_status.count;  // Store variables for next time
+    previous_micros_now = micros_now;
 
     return true;
     
   } else {
+
     return false;
   }
 }
@@ -110,6 +114,10 @@ int QuadratureEncoder::getEncoderAngleCount() {
   return encoder_status.angle_count;
 }
 
+float QuadratureEncoder::getEncoderVelocityRadians() {
+  return encoder_status.velocity_radians;
+}
+
 float QuadratureEncoder::getEncoderAngleRadians() {
   return encoder_status.angle_radians;
 }
@@ -119,7 +127,7 @@ long QuadratureEncoder::getEncoderDelta() {
 }
 
 float QuadratureEncoder::getEncoderVelocity() {
-  return encoder_status.velocity;
+  return encoder_status.velocity_count;
 }
 
 long QuadratureEncoder::getEncoderErrorCount() {

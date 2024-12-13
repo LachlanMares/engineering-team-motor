@@ -38,7 +38,9 @@ MotorInterface::MotorInterface(unsigned long update_period_us, int ppr) : Quadra
     command_variables.pulse_on_period = DEFAULT_PULSE_ON_PERIOD;
 
     encoder.direction = false;
-    encoder.velocity = 0.0;
+    encoder.angle_count = 0;
+    encoder.velocity_radians = 0.0;
+    encoder.angle_radians = 0.0;
     encoder.count = 0;
 
     pinMode(DIRECTION_PIN, OUTPUT);
@@ -236,6 +238,7 @@ boolean MotorInterface::Update(unsigned long micros_now) {
         encoder.count = getEncoderCount();
         encoder.angle_count = getEncoderAngleCount();
         encoder.angle_radians = getEncoderAngleRadians();
+        
         float velocity_sum = 0.0;
 
         // Basic moving average filter, move previous readings
@@ -244,8 +247,8 @@ boolean MotorInterface::Update(unsigned long micros_now) {
             velocity_sum += filter_buffer[i-1];
         }
 
-        filter_buffer[MAF_FILTER_LENGTH-1] = getEncoderVelocity();
-        encoder.velocity = (velocity_sum + filter_buffer[MAF_FILTER_LENGTH-1]) / MAF_FILTER_LENGTH;
+        filter_buffer[MAF_FILTER_LENGTH-1] = getEncoderVelocityRadians();
+        encoder.velocity_radians = (velocity_sum + filter_buffer[MAF_FILTER_LENGTH-1]) / MAF_FILTER_LENGTH;
     }
 
     boolean job_done = false;
