@@ -4,17 +4,6 @@
 #include "Arduino.h"
 #include "QuadratureEncoder.h"
 
-// IO Pins 
-#define DIRECTION_PIN 5
-#define STEP_PIN 6
-#define SLEEP_PIN 7
-#define RESET_PIN 8
-#define FAULT_PIN 9
-#define M0_PIN 10
-#define M1_PIN 11
-#define M2_PIN 12
-#define ENABLE_PIN 13
-
 // Status bits
 #define DIRECTION_BIT 0
 #define FAULT_BIT 1
