@@ -55,6 +55,8 @@ class Motor:
         self.job_complete_message_id = definitions['message_types']['JOB_COMPLETE_MESSAGE_ID']
         self.job_cancelled_message_id = definitions['message_types']['JOB_CANCELLED_MESSAGE_ID']
 
+        self.command_dict = definitions['command_types']
+
         self.microsteps = [1, 2, 4, 8, 16, 32]
         self.minimum_pulse_interval_us = definitions['motor']['MINIMUM_PULSE_INTERVAL_US']
         self.motor_pulses_per_revolution = definitions['motor']['MOTOR_STEPS_PER_REV']
@@ -62,8 +64,11 @@ class Motor:
         max_motor_rpm = (self.max_pulses_per_second / self.motor_pulses_per_revolution) * 60
         self.max_motor_rpm_list = [max_motor_rpm / j for j in self.microsteps]
 
+        self.current_motor_velocity = 0.0
+        self.current_motor_position = 0.0
+
         # Incoming messages don't include header or footer bytes
-        self.motor_status_message_struct = struct.Struct('!4BL')
+        self.motor_status_message_struct = struct.Struct('!4BL')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining}
         self.motor_feedback_message_struct = struct.Struct('!B2f')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder.velocity_radians, motor.encoder.angle_radians}
         self.response_message_struct = struct.Struct('!4B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK]};
         self.job_complete_message_struct = struct.Struct('!2B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id}
@@ -71,31 +76,10 @@ class Motor:
 
         self.send_queue = queue.Queue(maxsize=20)
         self.receive_queue = queue.Queue(maxsize=20)
-
-        # Some threading variables
         self.read_thread = None
         self.updating_thread = None
         self.read_lock = threading.Lock()
-        self.running = False
-
-        self.new_motor_status_message = 0
-        self.new_motor_pulses_message = 0
-        self.new_load_cell_status_message = 0
-        self.new_response_message = 0
-        self.new_job_complete_message = 0
-        self.new_job_cancelled_message = 0
-        self.send_message_in_buffer = 0
-
-        # Store incoming messages in lists
-        self.current_motor_status_message = []
-        self.current_response_message = []
-        self.current_job_complete_message = []
-        self.current_job_cancelled_message = []
-        self.send_message_buffer = []
-
-        self.current_motor_velocity = 0.0
-        self.current_motor_position = 0.0
-
+        self.running = False      
         self.ser = None
         self.connected = False
 
@@ -111,10 +95,10 @@ class Motor:
 
         if self.ser is not None:
             self.running = True
-            self.read_thread = threading.Thread(target=self.update, daemon=True)
+            self.read_thread = threading.Thread(target=self.serial_read_loop, daemon=True)
             self.read_thread.start()
 
-            self.updating_thread = threading.Thread(target=self.update_status_variables, daemon=True)
+            self.updating_thread = threading.Thread(target=self.serial_write_loop, daemon=True)
             self.updating_thread.start()
 
 
@@ -145,7 +129,7 @@ class Motor:
             except:
                 pass
 
-    def update(self):
+    def serial_read_loop(self):
         """
         Description:
             Serial communications are handled in a separate thread.
@@ -158,37 +142,39 @@ class Motor:
 
         """
         while self.running:
-            try:
-                # A check to see if serial port is open
-                if self.ser.isOpen():
-                    new_message_id, serial_buffer = self.get_serial_message()
+            # A check to see if serial port is open
+            if self.ser.isOpen():
+                new_message_id, serial_buffer = self.get_serial_message()
 
-                    if new_message_id != 0:
-                        if new_message_id == self.motor_feedback_message_id:
-                            feedback_message = self.motor_feedback_message_struct.unpack(serial_buffer)
-                            self.current_motor_velocity = feedback_message[1]
-                            self.current_motor_position = feedback_message[2]
+                if new_message_id != 0:
+                    if new_message_id == self.motor_feedback_message_id:
+                        feedback_message = self.motor_feedback_message_struct.unpack(serial_buffer)
+                        self.current_motor_velocity = feedback_message[1]
+                        self.current_motor_position = feedback_message[2]
 
-                        else:
-                            self.receive_queue.put({"id": new_message_id, "msg": serial_buffer})
+                    else:
+                        try:
+                            self.receive_queue.put({"id": new_message_id, 
+                                                    "msg": serial_buffer})    
+                        except queue.Full:
+                            print(f'Receive queue is full')
 
-                    if self.send_message_in_buffer > 0:
-                        for msg in self.send_message_buffer:
-                            # print(msg)
-                            self.ser.write(msg)
-                        self.send_message_buffer = []
-                        self.send_message_in_buffer = 0
+                        except Exception as e:
+                            print(f'Exception {e}')
 
-                else:
-                    self.ser.close()
-                    self.connected = False
-                    self.connect_serial_port()
+                try:
+                    new_message = self.send_queue.get(timeout=0.01)
+                    self.ser.write(new_message)
 
-            # Handle exception if port disconnected
-            except IOError as e:
-                print(f"Exception: {e}")
-                self.connected = False
+                except queue.Empty:
+                    pass
+
+                except Exception as e:
+                    print(f'Exception {e}')
+
+            else:
                 self.ser.close()
+                self.connected = False
                 self.connect_serial_port()
 
         self.ser.close()
@@ -213,196 +199,7 @@ class Motor:
 
         return 0, []
 
-    def motor_status_message_exists(self):
-        """
-        Description:
-            Checks if there is one or more status messages in the buffer
-
-        Returns:
-            new_msg (bool): True if new message exists
-        """
-        with self.read_lock:
-            new_msg = self.new_motor_status_message > 0
-        return new_msg
-
-    def motor_pulses_message_exists(self):
-        """
-        Description:
-            Checks if there is one or more status messages in the buffer
-
-        Returns:
-            new_msg (bool): True if new message exists
-        """
-        with self.read_lock:
-            new_msg = self.new_motor_pulses_message > 0
-        return new_msg
-
-    def load_cell_status_message_exists(self):
-        """
-        Description:
-            Checks if there is one or more status messages in the buffer
-
-        Returns:
-            new_msg (bool): True if new message exists
-        """
-        with self.read_lock:
-            new_msg = self.new_load_cell_status_message > 0
-        return new_msg
-
-    def response_message_exists(self):
-        """
-        Description:
-            Checks if there is one or more response messages in the buffer
-
-        Returns:
-            new_msg (bool): True if new message exists
-        """
-        with self.read_lock:
-            new_msg = self.new_response_message > 0
-        return new_msg
-
-    def job_complete_message_exists(self):
-        """
-        Description:
-            Checks if there is one or more response messages in the buffer
-
-        Returns:
-            new_msg (bool): True if new message exists
-        """
-        with self.read_lock:
-            new_msg = self.new_job_complete_message > 0
-        return new_msg
-
-    def job_cancelled_message_exists(self):
-        """
-        Description:
-            Checks if there is one or more response messages in the buffer
-
-        Returns:
-            new_msg (bool): True if new message exists
-        """
-        with self.read_lock:
-            new_msg = self.new_job_cancelled_message > 0
-        return new_msg
-
-    def copy_motor_status_messages(self):
-        """
-        Description:
-            Copy the status message buffer, then reset
-
-        Returns:
-            new_msg (list): List containing unread status messages
-        """
-        with self.read_lock:
-            new_msg = deepcopy(self.current_motor_status_message)
-            self.current_motor_status_message = []
-            self.new_motor_status_message = 0
-        return new_msg
-
-    def copy_motor_pulses_messages(self):
-        """
-        Description:
-            Copy the status message buffer, then reset
-
-        Returns:
-            new_msg (list): List containing unread status messages
-        """
-        with self.read_lock:
-            new_msg = deepcopy(self.current_motor_pulses_message)
-            self.current_motor_pulses_message = []
-            self.new_motor_pulses_message = 0
-        return new_msg
-
-    def copy_load_cell_status_messages(self):
-        """
-        Description:
-            Copy the status message buffer, then reset
-
-        Returns:
-            new_msg (list): List containing unread status messages
-        """
-        with self.read_lock:
-            new_msg = deepcopy(self.current_load_cell_status_message)
-            self.current_load_cell_status_message = []
-            self.new_load_cell_status_message = 0
-        return new_msg
-
-    def copy_response_messages(self):
-        """
-        Description:
-            Copy the response message buffer, then reset
-
-        Returns:
-            new_msg (list): List containing unread response messages
-        """
-        with self.read_lock:
-            new_msg = deepcopy(self.current_response_message)
-            self.current_response_message = []
-            self.new_response_message = 0
-        return new_msg
-
-    def copy_job_complete_messages(self):
-        """
-        Description:
-            Copy the job done message buffer, then reset
-
-        Returns:
-            new_msg (list): List containing unread response messages
-        """
-        with self.read_lock:
-            new_msg = deepcopy(self.current_job_complete_message)
-            self.current_job_complete_message = []
-            self.new_job_complete_message = 0
-        return new_msg
-
-    def copy_job_cancelled_messages(self):
-        """
-        Description:
-
-        Returns:
-            new_msg (list): List containing unread response messages
-        """
-        with self.read_lock:
-            new_msg = deepcopy(self.current_job_cancelled_message)
-            self.current_job_cancelled_message = []
-            self.new_job_cancelled_message = 0
-        return new_msg
-
-    def check_if_string(self, var, var_dict: dict):
-        """
-        Description:
-            Check if value entered is of type int or string
-
-        Args:
-            var (int or string): variable to set
-            var_dict (dictionary): dictionary associated with variable
-
-        Returns:
-            var (int): Input if its an int, else dictionary value for string
-        """
-        if isinstance(var, str):
-            return var_dict[var]
-        elif isinstance(var, int):
-            return var
-        else:
-            return var_dict[-1]
-
-    def get_message_key(self, val):
-        for key, value in self.definitions_dict['message_types'].items():
-            if val == value:
-                return key
-        return '??'
-
-    def motor_number_from_id(self, motor_id):
-        motor_number = -1
-        for i in range(self.definitions_dict['motors']['NUMBER_OF_MOTORS']):
-            if motor_id == self.definitions_dict[f'motor_{i}']['id']:
-                motor_number = i
-
-        return motor_number
-
     def send_motor_rotations_at_set_rpm(self,
-                                        motor_id: int,
                                         number_or_rotations: Union[float, int],
                                         rpm: Union[float, int],
                                         direction: bool,
@@ -411,19 +208,15 @@ class Motor:
                                         job_id: int = 0,
                                         ):
 
-        if motor_id in self.motor_ids_in_use:
-            motor_number = self.motor_number_from_id(motor_id)
-
             if rpm < 0:
                 return -1
 
-            elif rpm > self.definitions_dict[f'motor_{motor_number}']['max_rpm'][0]:
-                required_pulses = int(abs(number_or_rotations) * self.definitions_dict[f'motor_{motor_number}']['steps_per_rev'])
-                return self.send_motor_pulses(motor_id=motor_id,
-                                              direction=direction,
+            elif rpm > self.max_motor_rpm_list[0]:
+                required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution)
+                return self.send_motor_pulses(direction=direction,
                                               microstep=1,
                                               pulses=required_pulses,
-                                              pulse_interval=self.definitions_dict['motors']['MINIMUM_PULSE_INTERVAL_uS'],
+                                              pulse_interval=self.minimum_pulse_interval_us,
                                               pulse_on_period=None,
                                               use_ramping=use_ramping,
                                               ramping_steps=ramping_steps,
@@ -432,15 +225,14 @@ class Motor:
 
             else:
                 best_step_choice = 1
-                for (m_step, max_rpms) in zip(self.microsteps, self.definitions_dict[f'motor_{motor_number}']['max_rpm']):
+                for (m_step, max_rpms) in zip(self.microsteps, self.max_motor_rpm_list):
                     if rpm < max_rpms:
                         best_step_choice = m_step
 
-                pulse_interval = int((1 / ((rpm / 60) * self.definitions_dict[f'motor_{motor_number}']['steps_per_rev'] * best_step_choice)) * 1e6)
-                required_pulses = int(abs(number_or_rotations) * self.definitions_dict[f'motor_{motor_number}']['steps_per_rev']) * best_step_choice
+                pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
+                required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution) * best_step_choice
 
-                return self.send_motor_pulses(motor_id=motor_id,
-                                              direction=direction,
+                return self.send_motor_pulses(direction=direction,
                                               microstep=best_step_choice,
                                               pulses=required_pulses,
                                               pulse_interval=pulse_interval,
@@ -449,11 +241,8 @@ class Motor:
                                               ramping_steps=ramping_steps,
                                               job_id=job_id,
                                               )
-        else:
-            return -1
 
     def send_motor_pulses_at_set_rpm(self,
-                                     motor_id: int,
                                      rpm: Union[float, int],
                                      direction: bool,
                                      pulses: int = 0,
@@ -461,50 +250,39 @@ class Motor:
                                      ramping_steps: int = 0,
                                      job_id: int = 0,
                                      ):
-        if motor_id in self.motor_ids_in_use:
-            motor_number = self.motor_number_from_id(motor_id)
 
-            if rpm < 0:
-                return -1
-
-            elif rpm > self.definitions_dict[f'motor_{motor_number}']['max_rpm'][0]:
-                return self.send_motor_pulses(motor_id=motor_id,
-                                              direction=direction,
-                                              microstep=1,
-                                              pulses=pulses,
-                                              pulse_interval=self.definitions_dict['motors'][
-                                                  'MINIMUM_PULSE_INTERVAL_uS'],
-                                              pulse_on_period=None,
-                                              use_ramping=use_ramping,
-                                              ramping_steps=ramping_steps,
-                                              job_id=job_id,
-                                              )
-
-            else:
-                best_step_choice = 1
-                for (m_step, max_rpms) in zip(self.microsteps,
-                                              self.definitions_dict[f'motor_{motor_number}']['max_rpm']):
-                    if rpm < max_rpms:
-                        best_step_choice = m_step
-
-                pulse_interval = int((1 / ((rpm / 60) * self.definitions_dict[f'motor_{motor_number}'][
-                    'steps_per_rev'] * best_step_choice)) * 1e6)
-
-                return self.send_motor_pulses(motor_id=motor_id,
-                                              direction=direction,
-                                              microstep=best_step_choice,
-                                              pulses=pulses,
-                                              pulse_interval=pulse_interval,
-                                              pulse_on_period=None,
-                                              use_ramping=use_ramping,
-                                              ramping_steps=ramping_steps,
-                                              job_id=job_id,
-                                              )
-        else:
+        if rpm < 0:
             return -1
 
+        elif rpm > self.max_motor_rpm_list[0]:
+            return self.send_motor_pulses(direction=direction,
+                                          microstep=1,
+                                          pulses=pulses,
+                                          pulse_interval=self.minimum_pulse_interval_us,
+                                          use_ramping=use_ramping,
+                                          ramping_steps=ramping_steps,
+                                          job_id=job_id,
+                                          )
+
+        else:
+            best_step_choice = 1
+            for (m_step, max_rpms) in zip(self.microsteps, self.max_motor_rpm_list):
+                if rpm < max_rpms:
+                    best_step_choice = m_step
+
+            pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
+
+            return self.send_motor_pulses(direction=direction,
+                                          microstep=best_step_choice,
+                                          pulses=pulses,
+                                          pulse_interval=pulse_interval,
+                                          pulse_on_period=None,
+                                          use_ramping=use_ramping,
+                                          ramping_steps=ramping_steps,
+                                          job_id=job_id,
+                                          )
+
     def send_motor_rotations(self,
-                             motor_id: int,
                              number_or_rotations: Union[float, int],
                              direction: bool,
                              microstep: int = 1,
@@ -515,26 +293,20 @@ class Motor:
                              job_id: int = 0,
                              ):
 
-        if motor_id in self.motor_ids_in_use:
-            motor_number = self.motor_number_from_id(motor_id)
+        m_step = microstep if microstep in self.microsteps else 1
+        required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution) * m_step
 
-            m_step = microstep if microstep in self.microsteps else 1
-            required_pulses = int(abs(number_or_rotations) * self.definitions_dict[f'motor_{motor_number}']['steps_per_rev']) * m_step
-            return self.send_motor_pulses(motor_id=motor_id,
-                                          direction=direction,
-                                          microstep=m_step,
-                                          pulses=required_pulses,
-                                          pulse_interval=pulse_interval,
-                                          pulse_on_period=pulse_on_period,
-                                          use_ramping=use_ramping,
-                                          ramping_steps=ramping_steps,
-                                          job_id=job_id,
-                                          )
-        else:
-            return -1
+        return self.send_motor_pulses(direction=direction,
+                                      microstep=m_step,
+                                      pulses=required_pulses,
+                                      pulse_interval=pulse_interval,
+                                      pulse_on_period=pulse_on_period,
+                                      use_ramping=use_ramping,
+                                      ramping_steps=ramping_steps,
+                                      job_id=job_id,
+                                      )
 
     def send_motor_pulses(self,
-                          motor_id: int,
                           direction: bool,
                           microstep: int = 1,
                           pulses: int = 0,
@@ -544,221 +316,131 @@ class Motor:
                           ramping_steps: int = 0,
                           job_id: int = 0,
                           **kwargs):
-        """
-        Description:
-        """
-        if motor_id in self.motor_ids_in_use:
 
-            if pulse_on_period is None:  # Basic send job
-                if not use_ramping:
-                    command = self.definitions_dict['command_types']['SEND_JOB']
-                    self.send_message_buffer.append(struct.pack('!7BIB',
-                                                                self.STX,
-                                                                12,
-                                                                motor_id,
-                                                                command,
-                                                                1 if direction else 0,
-                                                                microstep if microstep in self.microsteps else 1,
-                                                                job_id,
-                                                                pulses,
-                                                                self.ETX
-                                                                ))
-                else:
-                    command = self.definitions_dict['command_types']['SEND_JOB_WITH_RAMPING']
-                    self.send_message_buffer.append(struct.pack('!7B2IB',
-                                                                self.STX,
-                                                                16,
-                                                                motor_id,
-                                                                command,
-                                                                1 if direction else 0,
-                                                                microstep if microstep in self.microsteps else 1,
-                                                                job_id,
-                                                                pulses,
-                                                                ramping_steps,
-                                                                self.ETX
-                                                                ))
+        if pulse_on_period is None:  # Basic send job
+            if not use_ramping:
+                command = self.command_dict['SEND_JOB']
+                self.send_queue.put(struct.pack('!6BIB',
+                                                self.STX,
+                                                11,
+                                                command,
+                                                1 if direction else 0,
+                                                microstep if microstep in self.microsteps else 1,
+                                                job_id,
+                                                pulses,
+                                                self.ETX
+                                                ))
             else:
-                if not use_ramping:
-                    command = self.definitions_dict['command_types']['SEND_JOB_ALL_VARIABLES']
-                    self.send_message_buffer.append(struct.pack('!7B3IB',
-                                                                self.STX,
-                                                                20,
-                                                                motor_id,
-                                                                command,
-                                                                1 if direction else 0,
-                                                                microstep if microstep in self.microsteps else 1,
-                                                                job_id,
-                                                                pulses,
-                                                                pulse_interval if pulse_interval > self.definitions_dict['motors']['MINIMUM_PULSE_INTERVAL_uS']
-                                                                            else self.definitions_dict['motors']['MINIMUM_PULSE_INTERVAL_uS'],
-                                                                pulse_on_period,
-                                                                self.ETX
-                                                                ))
-                else:
-                    command = self.definitions_dict['command_types']['SEND_JOB_ALL_VARIABLES_WITH_RAMPING']
-                    self.send_message_buffer.append(struct.pack('!7B4IB',
-                                                                self.STX,
-                                                                24,
-                                                                motor_id,
-                                                                command,
-                                                                1 if direction else 0,
-                                                                microstep if microstep in self.microsteps else 1,
-                                                                job_id,
-                                                                pulses,
-                                                                pulse_interval if pulse_interval > self.definitions_dict['motors']['MINIMUM_PULSE_INTERVAL_uS']
-                                                                            else self.definitions_dict['motors']['MINIMUM_PULSE_INTERVAL_uS'],
-                                                                pulse_on_period,
-                                                                ramping_steps,
-                                                                self.ETX
-                                                                ))
-
-            self.send_message_in_buffer += 1
-            return command
-
+                command = self.command_dict['SEND_JOB_WITH_RAMPING']
+                self.send_queue.put(struct.pack('!6B2IB',
+                                                self.STX,
+                                                15,
+                                                command,
+                                                1 if direction else 0,
+                                                microstep if microstep in self.microsteps else 1,
+                                                job_id,
+                                                pulses,
+                                                ramping_steps,
+                                                self.ETX
+                                                )) 
         else:
-            return -1
+            if not use_ramping:
+                command = self.command_dict['SEND_JOB_ALL_VARIABLES']
+                self.send_queue.put(struct.pack('!6B3IB',
+                                                self.STX,
+                                                19,
+                                                command,
+                                                1 if direction else 0,
+                                                microstep if microstep in self.microsteps else 1,
+                                                job_id,
+                                                pulses,
+                                                pulse_interval if pulse_interval >self.minimum_pulse_interval_us else self.minimum_pulse_interval_us,
+                                                pulse_on_period,
+                                                self.ETX
+                                                ))
+            else:
+                command = self.command_dict['SEND_JOB_ALL_VARIABLES_WITH_RAMPING']
+                self.send_queue.put(struct.pack('!6B4IB',
+                                                self.STX,
+                                                23,
+                                                command,
+                                                1 if direction else 0,
+                                                microstep if microstep in self.microsteps else 1,
+                                                job_id,
+                                                pulses,
+                                                pulse_interval if pulse_interval > self.minimum_pulse_interval_us else self.minimum_pulse_interval_us,
+                                                pulse_on_period,
+                                                ramping_steps,
+                                                self.ETX
+                                                ))
 
-    def send_pause_job(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['PAUSE_JOB'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
+        return command
 
-        else:
-            return False
 
-    def send_resume_job(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['RESUME_JOB'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
+    def send_pause_job(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['PAUSE_JOB'],
+                                        self.ETX
+                                        ))
 
-        else:
-            return False
+    def send_resume_job(self):
+        self.send_queue.put(struct.pack('!4B',
+                            self.STX,
+                            4,
+                            self.command_dict['RESUME_JOB'],
+                            self.ETX
+                            ))
 
-    def send_cancel_job(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['CANCEL_JOB'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
+    def send_cancel_job(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['CANCEL_JOB'],
+                                        self.ETX
+                                        ))
 
-        else:
-            return False
 
-    def send_enable_motor(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['ENABLE_MOTOR'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
+    def send_enable_motor(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['ENABLE_MOTOR'],
+                                        self.ETX
+                                        ))
 
-        else:
-            return False
+    def send_disable_motor(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['DISABLE_MOTOR'],
+                                        self.ETX
+                                        ))
 
-    def send_disable_motor(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['DISABLE_MOTOR'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
+    def send_sleep_motor(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['SLEEP_MOTOR'],
+                                        self.ETX
+                                        ))
 
-        else:
-            return False
+    def send_wake_motor(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['WAKE_MOTOR'],
+                                        self.ETX
+                                        ))
 
-    def send_sleep_motor(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['SLEEP_MOTOR'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
-
-        else:
-            return False
-
-    def send_wake_motor(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['WAKE_MOTOR'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
-
-        else:
-            return False
-
-    def send_reset_motor(self, motor_id: int):
-        if motor_id in self.motor_ids_in_use:
-            self.send_message_buffer.append(struct.pack('!5B',
-                                                        self.STX,
-                                                        5,
-                                                        motor_id,
-                                                        self.definitions_dict['command_types']['RESET_MOTOR'],
-                                                        self.ETX
-                                                        ))
-            self.send_message_in_buffer += 1
-            return True
-
-        else:
-            return False
-
-    def get_motor_key(self, val):
-        for i in range(self.definitions_dict['motors']['NUMBER_OF_MOTORS']):
-            for key, value in self.definitions_dict[f'motor_{i}'].items():
-                if val == value:
-                    return f'motor_{i}'
-        return '??'
-
-    def get_command_key(self, val):
-        for key, value in self.definitions_dict['command_types'].items():
-            if val == value:
-                return key
-        return '??'
-
-    def get_response_key(self, val):
-        for key, value in self.definitions_dict['response_types'].items():
-            if val == value:
-                return key
-        if val == 0:
-            return ''
-
-        return '??'
+    def send_reset_motor(self):
+        self.send_queue.put(struct.pack('!4B',
+                                        self.STX,
+                                        4,
+                                        self.command_dict['RESET_MOTOR'],
+                                        self.ETX
+                                        ))
 
     def get_response_messages(self):
         """
