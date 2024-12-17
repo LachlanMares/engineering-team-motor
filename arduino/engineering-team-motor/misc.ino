@@ -14,21 +14,28 @@ void bytesFromUnsignedLong(unsigned long long_value, unsigned char* byte_ptr) {
   *byte_ptr = long_value;  
 }
 
-void bytesFromFloat16Bit(float float_value, unsigned char* byte_ptr, uint8_t multiplier) {
-  int16_t float_value_int16 = (int16_t)(float_value * (float)(multiplier));
-  *byte_ptr++ = float_value_int16 >> 8;
-  *byte_ptr++ = float_value_int16;
-  *byte_ptr = multiplier;
-}
+// void bytesFromFloat16Bit(float float_value, unsigned char* byte_ptr, uint8_t multiplier) {
+//   int16_t float_value_int16 = (int16_t)(float_value * (float)(multiplier));
+//   *byte_ptr++ = float_value_int16 >> 8;
+//   *byte_ptr++ = float_value_int16;
+//   *byte_ptr = multiplier;
+// }
 
-void bytesFromFloat32Bit(float float_value, unsigned char* byte_ptr, uint16_t multiplier) {
-  int32_t float_value_int32 = (int32_t)(float_value * (float)(multiplier));
-  *byte_ptr++ = float_value_int32 >> 24;                                      
-  *byte_ptr++ = float_value_int32 >> 16;   
-  *byte_ptr++ = float_value_int32 >> 8;   
-  *byte_ptr++ = float_value_int32;  
-  *byte_ptr++ = multiplier >> 8;   
-  *byte_ptr = multiplier;  
+// void bytesFromFloat32Bit(float float_value, unsigned char* byte_ptr, uint16_t multiplier) {
+//   int32_t float_value_int32 = (int32_t)(float_value * (float)(multiplier));
+//   *byte_ptr++ = float_value_int32 >> 24;                                      
+//   *byte_ptr++ = float_value_int32 >> 16;   
+//   *byte_ptr++ = float_value_int32 >> 8;   
+//   *byte_ptr++ = float_value_int32;  
+//   *byte_ptr++ = multiplier >> 8;   
+//   *byte_ptr = multiplier;  
+// }
+
+void bytesFromFloat32Bit(float float_value, unsigned char* byte_ptr) {
+  *byte_ptr++ = float_value >> 24;                                      
+  *byte_ptr++ = float_value >> 16;   
+  *byte_ptr++ = float_value >> 8;   
+  *byte_ptr = float_value;  
 }
 
 long longFromBytes(unsigned char* byte_ptr) {                                          

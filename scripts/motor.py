@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 
 
 class Motor:
-    def __init__(self, definitions: dict, serial_port: Union[str, None] = None, queue_size: int = 10):
+    def __init__(self, definitions: dict, serial_port: Union[str, None] = None):
         """
         Description:
 
@@ -21,57 +21,53 @@ class Motor:
             serial_port (str): Default serial port path as string
             definitions (dict): Parsed header file used by the Arduino
         """
-        self.definitions_dict = definitions
-
         # Serial settings
         self.serial_port_name = serial_port
-        self.BAUD_RATE = self.definitions_dict['serial_settings']['BAUD_RATE']
-        self.byte_STX = struct.pack('!B', self.definitions_dict['serial_settings']['STX'])
+        self.BAUD_RATE = definitions['serial_settings']['BAUD_RATE']
+        self.byte_STX = struct.pack('!B', definitions['serial_settings']['STX'])
 
-        self.STX = self.definitions_dict['serial_settings']['STX']
-        self.ETX = self.definitions_dict['serial_settings']['ETX']
-        self.ACK = self.definitions_dict['serial_settings']['ACK']
-        self.NAK = self.definitions_dict['serial_settings']['NAK']
+        self.STX = definitions['serial_settings']['STX']
+        self.ETX = definitions['serial_settings']['ETX']
+        self.ACK = definitions['serial_settings']['ACK']
+        self.NAK = definitions['NAK']
 
         # Status message
         self.motor_status_dict = {}
 
         # encoder_settings
-        self.encoder_update_period_us = self.definitions_dict['encoder_settings']['ENCODER_UPDATE_PERIOD_US']
-        self.encoder_pulses_per_revolution = self.definitions_dict['encoder_settings']['ENCODER_PULSES_PER_REVOLUTION']
+        self.encoder_update_period_us = definitions['encoder_settings']['ENCODER_UPDATE_PERIOD_US']
+        self.encoder_pulses_per_revolution = definitions['encoder_settings']['ENCODER_PULSES_PER_REVOLUTION']
 
         # status_message_bits
-        self.status_direction_bit = self.definitions_dict['status_message_bits']['STATUS_DIRECTION_BIT']
-        self.status_fault_bit = self.definitions_dict['status_message_bits']['STATUS_FAULT_BIT']
-        self.status_paused_bit = self.definitions_dict['status_message_bits']['STATUS_PAUSED_BIT']
-        self.status_ramping_bit = self.definitions_dict['status_message_bits']['STATUS_RAMPING_BIT']
-        # self.status_spare_bit = self.definitions_dict['status_message_bits']['STATUS_SPARE_BIT']
-        self.status_enabled_bit = self.definitions_dict['status_message_bits']['STATUS_ENABLED_BIT']
-        self.status_running_bit = self.definitions_dict['status_message_bits']['STATUS_RUNNING_BIT']
-        self.status_sleep_bit = self.definitions_dict['status_message_bits']['STATUS_SLEEP_BIT']
+        self.status_direction_bit = definitions['status_message_bits']['STATUS_DIRECTION_BIT']
+        self.status_fault_bit = definitions['status_message_bits']['STATUS_FAULT_BIT']
+        self.status_paused_bit = definitions['status_message_bits']['STATUS_PAUSED_BIT']
+        self.status_ramping_bit = definitions['status_message_bits']['STATUS_RAMPING_BIT']
+        # self.status_spare_bit = definitions['status_message_bits']['STATUS_SPARE_BIT']
+        self.status_enabled_bit = definitions['status_message_bits']['STATUS_ENABLED_BIT']
+        self.status_running_bit = definitions['status_message_bits']['STATUS_RUNNING_BIT']
+        self.status_sleep_bit = definitions['status_message_bits']['STATUS_SLEEP_BIT']
 
         # message_types
-        self.motor_status_message_id = self.definitions_dict['message_types']['MOTOR_STATUS_MESSAGE_ID']
-        self.motor_feedback_message_id = self.definitions_dict['message_types']['MOTOR_FEEDBACK_MESSAGE_ID']
-        self.response_message_id = self.definitions_dict['message_types']['RESPONSE_MESSAGE_ID']
-        self.job_complete_message_id = self.definitions_dict['message_types']['JOB_COMPLETE_MESSAGE_ID']
-        self.job_cancelled_message_id = self.definitions_dict['message_types']['JOB_CANCELLED_MESSAGE_ID']
+        self.motor_status_message_id = definitions['message_types']['MOTOR_STATUS_MESSAGE_ID']
+        self.motor_feedback_message_id = definitions['message_types']['MOTOR_FEEDBACK_MESSAGE_ID']
+        self.response_message_id = definitions['message_types']['RESPONSE_MESSAGE_ID']
+        self.job_complete_message_id = definitions['message_types']['JOB_COMPLETE_MESSAGE_ID']
+        self.job_cancelled_message_id = definitions['message_types']['JOB_CANCELLED_MESSAGE_ID']
 
         self.microsteps = [1, 2, 4, 8, 16, 32]
-        self.minimum_pulse_interval_us = self.definitions_dict['motor']['MINIMUM_PULSE_INTERVAL_US']
-        self.motor_pulses_per_revolution = self.definitions_dict['motor']['MOTOR_STEPS_PER_REV']
+        self.minimum_pulse_interval_us = definitions['motor']['MINIMUM_PULSE_INTERVAL_US']
+        self.motor_pulses_per_revolution = definitions['motor']['MOTOR_STEPS_PER_REV']
         self.max_pulses_per_second = 1e6 / self.minimum_pulse_interval_us
         max_motor_rpm = (self.max_pulses_per_second / self.motor_pulses_per_revolution) * 60
-        self.max_motor_rpm = [max_motor_rpm / j for j in self.microsteps]
-        self.definitions_dict['motor']['max_rpm'] = [max_motor_rpm / j for j in self.microsteps]
+        self.max_motor_rpm_list = [max_motor_rpm / j for j in self.microsteps]
 
-        # Incoming messages don't include header bytes
-        self.motor_status_message_struct = struct.Struct('!22B')
-        self.motor_feedback_message_struct = struct.Struct('!B10lB')
-        self.load_cell_status_message_struct = struct.Struct('!BlB')
-        self.response_message_struct = struct.Struct('!4B')
-        self.job_complete_message_struct = struct.Struct('!4B')
-        self.job_cancelled_message_struct = struct.Struct('!4B')
+        # Incoming messages don't include header or footer bytes
+        self.motor_status_message_struct = struct.Struct('!4BL')
+        self.motor_feedback_message_struct = struct.Struct('!B2f')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder.velocity_radians, motor.encoder.angle_radians}
+        self.response_message_struct = struct.Struct('!4B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK]};
+        self.job_complete_message_struct = struct.Struct('!2B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id}
+        self.job_cancelled_message_struct = struct.Struct('!2B')  # {JOB_CANCELLED_MESSAGE_ID, motor_ptr.status_variables.job_id};
 
         self.send_queue = queue.Queue(maxsize=20)
         self.receive_queue = queue.Queue(maxsize=20)
@@ -92,7 +88,6 @@ class Motor:
 
         # Store incoming messages in lists
         self.current_motor_status_message = []
-        self.current_motor_pulses_message = []
         self.current_response_message = []
         self.current_job_complete_message = []
         self.current_job_cancelled_message = []
@@ -122,7 +117,6 @@ class Motor:
             self.updating_thread = threading.Thread(target=self.update_status_variables, daemon=True)
             self.updating_thread.start()
 
-        return self
 
     def stop(self):
         self.running = False
@@ -136,72 +130,20 @@ class Motor:
             Loop until a valid serial connection is found.
         """
         while not self.connected:
-            print(f"doser-bot: trying to connect serial")
+            print(f"Trying to connect serial")
 
             try:
-                if self.search_for_port():
+                self.ser = serial.Serial(self.serial_port_name, self.BAUD_RATE, timeout=2, )
+                if self.ser.isOpen():
                     self.connected = True
-                    print(f"doser-bot: serial connected")
+                    print(f"Serial connected")
                     break
                 else:
                     time.sleep(1)
-                    print(f"doser-bot: timeout")
+                    print(f"Serial timeout")
+
             except:
                 pass
-
-    def search_for_port(self):
-        """
-        Description:
-            Search from a list of serial port options.
-
-        Args:
-
-        Returns:
-            connected (bool): True for connected, False for not
-
-        """
-        connected = False
-        serial_port_options = list()
-        possible_options = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2']
-
-        if self.serial_port_name is not None:
-            serial_port_options.append(self.serial_port_name)
-
-        for port in possible_options:
-            if port not in serial_port_options:
-                serial_port_options.append(port)
-
-        # Start scanning serial ports in the list
-        for port in serial_port_options:
-            try:
-                # Try to connect to a port
-                ser = serial.Serial(port, self.BAUD_RATE, timeout=2, )
-
-                # Test if port is open
-                if ser.isOpen():
-                    for z in range(3):
-                        self.ser = ser
-                        self.ser.write(self.who_am_i_buffer)
-                        time.sleep(0.5)
-                        new_message, serial_buffer = self.get_serial_message()
-
-                        if new_message:
-                            if serial_buffer[0] == self.who_am_i_message_id:
-                                connected = True
-
-            except Exception as e:
-                pass
-
-            if connected:
-                break
-
-        return connected
-
-    def is_connected(self):
-        if self.ser.isOpen():
-            return True, self.ser.name
-        else:
-            return False, "Not Connected"
 
     def update(self):
         """
@@ -222,59 +164,13 @@ class Motor:
                     new_message_id, serial_buffer = self.get_serial_message()
 
                     if new_message_id != 0:
-                        if new_message_id == self.motor_status_message_id:
-                            with self.read_lock:
-                                self.current_motor_status_message.append(self.motor_status_message_struct.unpack(serial_buffer))
-                                self.new_motor_status_message += 1
+                        if new_message_id == self.motor_feedback_message_id:
+                            feedback_message = self.motor_feedback_message_struct.unpack(serial_buffer)
+                            self.current_motor_velocity = feedback_message[1]
+                            self.current_motor_position = feedback_message[2]
 
-                                if self.new_motor_status_message > 10:
-                                    self.current_motor_status_message = self.current_motor_status_message[-10:]
-                                    self.new_motor_status_message = 10
-
-                        if new_message_id == self.motor_pulses_message_id:
-                            with self.read_lock:
-                                self.current_motor_pulses_message.append(self.motor_pulses_message_struct.unpack(serial_buffer))
-                                self.new_motor_pulses_message += 1
-
-                                if self.new_motor_pulses_message > 10:
-                                    self.current_motor_pulses_message = self.current_motor_pulses_message[-10:]
-                                    self.new_motor_pulses_message = 10
-
-                        if new_message_id == self.load_cell_status_message_id:
-                            with self.read_lock:
-                                self.current_load_cell_status_message.append(self.load_cell_status_message_struct.unpack(serial_buffer))
-                                self.new_load_cell_status_message += 1
-
-                                if self.new_load_cell_status_message > 10:
-                                    self.current_load_cell_status_message = self.current_load_cell_status_message[-10:]
-                                    self.new_load_cell_status_message = 10
-
-                        elif new_message_id == self.response_message_id:
-                            with self.read_lock:
-                                self.current_response_message.append(self.response_message_struct.unpack(serial_buffer))
-                                self.new_response_message += 1
-
-                                if self.new_response_message > 10:
-                                    self.current_response_message = self.current_response_message[-10:]
-                                    self.new_response_message = 10
-
-                        elif new_message_id == self.job_complete_message_id:
-                            with self.read_lock:
-                                self.current_job_complete_message.append(self.job_complete_message_struct.unpack(serial_buffer))
-                                self.new_job_complete_message += 1
-
-                                if self.new_job_complete_message > 10:
-                                    self.current_job_complete_message = self.current_job_complete_message[-10:]
-                                    self.new_job_complete_message = 10
-
-                        elif new_message_id == self.job_cancelled_message_id:
-                            with self.read_lock:
-                                self.current_job_cancelled_message.append(self.job_cancelled_message_struct.unpack(serial_buffer))
-                                self.new_job_cancelled_message += 1
-
-                                if self.new_job_cancelled_message > 10:
-                                    self.current_job_cancelled_message = self.current_job_cancelled_message[-10:]
-                                    self.new_job_cancelled_message = 10
+                        else:
+                            self.receive_queue.put({"id": new_message_id, "msg": serial_buffer})
 
                     if self.send_message_in_buffer > 0:
                         for msg in self.send_message_buffer:
@@ -290,7 +186,7 @@ class Motor:
 
             # Handle exception if port disconnected
             except IOError as e:
-                print(f"doser-bot: {e}")
+                print(f"Exception: {e}")
                 self.connected = False
                 self.ser.close()
                 self.connect_serial_port()
@@ -309,10 +205,9 @@ class Motor:
         """
         if self.ser.inWaiting() != 0:
             if self.ser.read() == self.byte_STX:
-                # print("stx")
                 message_length = self.ser.read()
                 serial_buffer = self.ser.read(int.from_bytes(message_length, "big") - 2)
-                # print(serial_buffer)
+
                 if serial_buffer[-1] == self.ETX:
                     return serial_buffer[0], serial_buffer
 

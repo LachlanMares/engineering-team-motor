@@ -30,11 +30,11 @@ void updateSerial() {
   }
 
   if (scheduler.taskReady(MOTOR_FEEDBACK_TASK_ID)) {
-    uint8_t motor_feedback_buffer[13];
+    uint8_t motor_feedback_buffer[9];
     motor_feedback_buffer[0] = MOTOR_FEEDBACK_MESSAGE_ID;
-    bytesFromFloat32Bit(motor.encoder.velocity_radians, &motor_feedback_buffer[1], 1000);
-    bytesFromFloat32Bit(motor.encoder.angle_radians, &motor_feedback_buffer[7], 1000);
-    serialport.sendMessage(&motor_feedback_buffer[0], 13);
+    bytesFromFloat32Bit(motor.encoder.velocity_radians, &motor_feedback_buffer[1]);
+    bytesFromFloat32Bit(motor.encoder.angle_radians, &motor_feedback_buffer[5]);
+    serialport.sendMessage(&motor_feedback_buffer[0], 9);
   }
 }
 
@@ -250,8 +250,10 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
         if (motor_ptr->status_variables.enabled) {
           if(motor_ptr->status_variables.running) {
             motor_ptr->CancelJob();
-            uint8_t job_cancelled_buffer[3] = {JOB_CANCELLED_MESSAGE_ID, motor_num, motor_ptr->status_variables.job_id};
-            serialport.sendMessage(&job_cancelled_buffer[0], 3);
+
+            uint8_t job_cancelled_buffer[2] = {JOB_CANCELLED_MESSAGE_ID, motor_ptr->status_variables.job_id};
+            serialport.sendMessage(&job_cancelled_buffer[0], 2);
+
             motor_ptr->ResetJobId();
             response_buffer[2] = 0x00;
             response_buffer[3] = ACK;
