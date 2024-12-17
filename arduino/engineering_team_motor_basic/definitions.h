@@ -2,34 +2,14 @@
 // "// some_text" will be a python dictionary key until next "// other_text". 
 // Do not put comments at the end of #define lines
 
-// serial_settings
-#define BAUD_RATE                           250000
-#define SERIAL_BUFFER_LENGTH                256
-#define STATUS_MESSAGE_LENGTH               54
-#define SERIAL_TIMEOUT_MS                   100
-#define STX                                 0x02
-#define ETX                                 0x03
-#define ACK                                 0x06
-#define NAK                                 0x15
-
-// encoder_settings
-#define ENCODER_UPDATE_PERIOD_US  10000
-#define ENCODER_PULSES_PER_REVOLUTION  1600
-
 // schedule_settings
 #define PRINT_TASK_ID  0
 #define PRINT_INTERVAL_US  100000
-#define FAULT_CHECK_TASK_ID  1
+#define JOB_INTERVAL_TASK_ID  1
+#define JOB_INTERVAL_US  100000
+#define FAULT_CHECK_TASK_ID  2
 #define FAULT_CHECK_INTERVAL_US  100000
-#define STATUS_MESSAGE_TASK_ID  2
-#define STATUS_MESSAGE_INTERVAL_US  250000
-#define MOTOR_FEEDBACK_TASK_ID  3
-#define MOTOR_FEEDBACK_INTERVAL_US  20000
 
-// io_settings
-#define MOTOR_INT_PIN_A 2
-#define MOTOR_INT_PIN_B 3
-#define MOTOR_INT_PIN_Z 4
 #define DIRECTION_PIN 5
 #define STEP_PIN 6
 #define SLEEP_PIN 7

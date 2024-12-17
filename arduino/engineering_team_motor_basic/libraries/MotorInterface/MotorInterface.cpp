@@ -97,7 +97,7 @@ void MotorInterface::Reset() {
 }
 
 boolean MotorInterface::FaultStatus() {
-    return false; // !digitalRead(_fault_pin);
+    return !digitalRead(_fault_pin);
 }
 
 void MotorInterface::DecodeMicroStep() {

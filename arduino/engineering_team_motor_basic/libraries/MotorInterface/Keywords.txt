@@ -1,0 +1,59 @@
+#######################################
+# Syntax Coloring Map for MotorInterface
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+MotorInterface	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+Initialise KEYWORD2
+Enable KEYWORD2
+Disable KEYWORD2
+Reset KEYWORD2
+FaultStatus KEYWORD2
+StartJob KEYWORD2
+PauseJob KEYWORD2
+ResumeJob KEYWORD2
+StopJob KEYWORD2
+Update KEYWORD2
+Status KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+DIRECTION_BIT LITERAL1
+FAULT_BIT LITERAL1
+M0_BIT LITERAL1
+M1_BIT LITERAL1
+M2_BIT LITERAL1
+ENABLE_BIT LITERAL1
+RESET_BIT LITERAL1
+SLEEP_BIT LITERAL1
+
+IO_DIRECTION LITERAL1
+IO_STATE LITERAL1
+
+CW  LITERAL1
+CCW LITERAL1
+
+DEFAULT_PULSE_PERIOD LITERAL1
+DEFAULT_PULSE_ON_PERIOD LITERAL1
+DEFAULT_PULSE_INTERVAL LITERAL1
+MINIMUM_PULSE_INTERVAL LITERAL1
+MAXIMUM_PULSE_INTERVAL LITERAL1
+
+MCP23017_ADDR_0	LITERAL1
+MCP23017_ADDR_1	LITERAL1
+MCP23017_ADDR_2	LITERAL1
+MCP23017_ADDR_3	LITERAL1
+MCP23017_ADDR_4	LITERAL1
+MCP23017_ADDR_5	LITERAL1
+MCP23017_ADDR_6	LITERAL1
+MCP23017_ADDR_7	LITERAL1

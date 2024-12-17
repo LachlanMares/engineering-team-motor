@@ -4,7 +4,7 @@
 #include <AtSerial.h>
 
 MotorInterface motor(ENCODER_UPDATE_PERIOD_US, ENCODER_PULSES_PER_REVOLUTION);
-ScheduleMicro scheduler(PRINT_INTERVAL_US, JOB_INTERVAL_US, STATUS_MESSAGE_INTERVAL_US, MOTOR_FEEDBACK_INTERVAL_US);
+ScheduleMicro scheduler(PRINT_INTERVAL_US, FAULT_CHECK_INTERVAL_US, STATUS_MESSAGE_INTERVAL_US, MOTOR_FEEDBACK_INTERVAL_US);
 AtSerial serialport;
 
 bool job_direction = false;
@@ -41,18 +41,5 @@ void loop() {
     Serial.println(motor.encoder.angle_radians);
   }
 
-  // if (scheduler.taskReady(JOB_TASK_ID)) {
-  //   if (motor.status_variables.job_id == 0) {
-  //     motor.command_variables.use_ramping = true;
-  //     motor.command_variables.direction = job_direction;
-  //     motor.command_variables.microstep = 16;
-  //     motor.command_variables.job_id = 1;
-  //     motor.command_variables.pulses = 6400;
-  //     motor.command_variables.pulse_interval = 0;
-  //     motor.command_variables.pulse_on_period = 0;
-  //     motor.command_variables.ramping_steps = 400;
-  //     motor.StartJob();
-  //     job_direction = !job_direction;
-  //   }
-  // }
+
 }

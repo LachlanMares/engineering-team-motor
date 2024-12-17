@@ -17,12 +17,15 @@ void updateSerial() {
   }
 
   if (scheduler.taskReady(STATUS_MESSAGE_TASK_ID)) {
+    motor.UpdateStatus();
+
     uint8_t motor_status_buffer[8];
     motor_status_buffer[0] = MOTOR_STATUS_MESSAGE_ID;
     motor_status_buffer[1] = motor.status_byte;
     motor_status_buffer[2] = motor.status_variables.job_id; 
     motor_status_buffer[3] = motor.status_variables.microstep;
     bytesFromUnsignedLong(motor.status_variables.pulses_remaining, &motor_status_buffer[3]);
+
     serialport.sendMessage(&motor_status_buffer[0], 8);
   }
 
@@ -36,7 +39,7 @@ void updateSerial() {
 }
 
 void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int bytes_read) {
-  uint8_t response_buffer[4] = {RESPONSE_MESSAGE_ID, serial_buffer[1], 0x00, ACK};
+  uint8_t response_buffer[4] = {RESPONSE_MESSAGE_ID, serial_buffer[1], UNKNOWN_MOTOR_COMMAND_RESPONSE, NAK};
 
   switch(serial_buffer[1]) {
 
@@ -67,6 +70,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
                 motor_ptr->command_variables.pulse_on_period = 0;
                 motor_ptr->command_variables.ramping_steps = 0;
                 motor_ptr->StartJob();
+                response_buffer[2] = 0x00;
+                response_buffer[3] = ACK;
 
               } else {
                   response_buffer[2] = BAD_JOB_COMMAND_RESPONSE;
@@ -101,6 +106,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
                 motor_ptr->command_variables.pulse_interval = 0;
                 motor_ptr->command_variables.pulse_on_period = 0;
                 motor_ptr->StartJob();
+                response_buffer[2] = 0x00;
+                response_buffer[3] = ACK;
 
               } else {
                   response_buffer[2] = BAD_JOB_COMMAND_RESPONSE;
@@ -135,6 +142,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
                 motor_ptr->command_variables.pulse_interval = longFromBytes(&serial_buffer[9]);
                 motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[13]);
                 motor_ptr->StartJob();
+                response_buffer[2] = 0x00;
+                response_buffer[3] = ACK;
 
               } else {
                   response_buffer[2] = BAD_JOB_COMMAND_RESPONSE;
@@ -170,6 +179,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
                 motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[13]);
                 motor_ptr->command_variables.ramping_steps = longFromBytes(&serial_buffer[17]);
                 motor_ptr->StartJob();
+                response_buffer[2] = 0x00;
+                response_buffer[3] = ACK;                
 
               } else {
                   response_buffer[2] = BAD_JOB_COMMAND_RESPONSE;
@@ -194,6 +205,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
 
               } else {
                   motor_ptr->PauseJob();
+                  response_buffer[2] = 0x00;
+                  response_buffer[3] = ACK;                  
                 }
             } else {
                 response_buffer[2] = NO_ACTIVE_JOB_RESPONSE;
@@ -215,7 +228,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
             if(motor_ptr->status_variables.running) {
               if(motor_ptr->status_variables.paused) {
                 motor_ptr->ResumeJob();
-
+                response_buffer[2] = 0x00;
+                response_buffer[3] = ACK;
               } else {
                   response_buffer[2] = JOB_ALREADY_RESUMED_RESPONSE;
                   response_buffer[3] = NAK;
@@ -239,7 +253,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
             uint8_t job_cancelled_buffer[3] = {JOB_CANCELLED_MESSAGE_ID, motor_num, motor_ptr->status_variables.job_id};
             serialport.sendMessage(&job_cancelled_buffer[0], 3);
             motor_ptr->ResetJobId();
-
+            response_buffer[2] = 0x00;
+            response_buffer[3] = ACK;
           } else {
                 response_buffer[2] = NO_ACTIVE_JOB_RESPONSE;
                 response_buffer[3] = NAK;
@@ -263,6 +278,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
 
           } else {
               motor_ptr->Enable();
+              response_buffer[2] = 0x00;
+              response_buffer[3] = ACK;
             }
 
       break;
@@ -275,7 +292,8 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
 
         } else if (motor_ptr->status_variables.enabled) {
             motor_ptr->Disable();
-
+            response_buffer[2] = 0x00;
+            response_buffer[3] = ACK;
           } else {
               response_buffer[2] = MOTOR_ALREADY_DISABLED_RESPONSE;
               response_buffer[3] = NAK;
@@ -287,6 +305,7 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
 
         if(motor_ptr->status_variables.fault) {
           response_buffer[2] = MOTOR_IN_FAULT_RESPONSE;
+          response_buffer[3] = ACK;
           if(!motor_ptr->status_variables.sleep) {
             motor_ptr->Sleep();
           }
@@ -299,8 +318,11 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
               if(motor_ptr->status_variables.enabled && motor_ptr->status_variables.running) {
                 motor_ptr->PauseJob();
                 response_buffer[2] = SLEEP_WITH_ACTIVE_JOB_RESPONSE;
+                response_buffer[3] = ACK;
               }
               motor_ptr->Sleep();
+              response_buffer[2] = 0x00;
+              response_buffer[3] = ACK;
             }
 
       break;
@@ -315,6 +337,7 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
             motor_ptr->Wake();
             if(motor_ptr->status_variables.enabled && motor_ptr->status_variables.running && motor_ptr->status_variables.paused) {
               response_buffer[2] = WAKE_WITH_ACTIVE_JOB_RESPONSE;
+              response_buffer[3] = ACK;
               motor_ptr->ResumeJob();
             }
 
@@ -327,9 +350,9 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
 
     case RESET_MOTOR:
 
-      boolean was_enabled = false;
-      boolean was_awake = false;
-      boolean was_running = false;
+      bool was_enabled = false;
+      bool was_awake = false;
+      bool was_running = false;
 
       if(motor_ptr->status_variables.enabled) {
         was_enabled = true;
@@ -359,11 +382,9 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
         motor_ptr->ResumeJob();
       }
 
-      break;
-
-    default:
-      response_buffer[2] = UNKNOWN_MOTOR_COMMAND_RESPONSE;
-      response_buffer[3] = NAK;
+      response_buffer[2] = 0x00;
+      response_buffer[3] = ACK;
+      
       break;
   }
 

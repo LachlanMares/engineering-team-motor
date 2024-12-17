@@ -69,7 +69,7 @@ class Motor:
         self.motor_status_message_struct = struct.Struct('!22B')
         self.motor_feedback_message_struct = struct.Struct('!B10lB')
         self.load_cell_status_message_struct = struct.Struct('!BlB')
-        self.response_message_struct = struct.Struct('!6B')
+        self.response_message_struct = struct.Struct('!4B')
         self.job_complete_message_struct = struct.Struct('!4B')
         self.job_cancelled_message_struct = struct.Struct('!4B')
 
