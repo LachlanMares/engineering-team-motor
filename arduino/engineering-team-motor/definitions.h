@@ -95,7 +95,7 @@
 #define SLEEP_WITH_ACTIVE_JOB_RESPONSE      0xD1
 #define WAKE_WITH_ACTIVE_JOB_RESPONSE       0xD0
 
-// motor
+// motor_settings
 #define MOTOR_ID                            0x00
 #define MOTOR_STEPS_PER_REV                 200
 #define MINIMUM_PULSE_INTERVAL_US           500

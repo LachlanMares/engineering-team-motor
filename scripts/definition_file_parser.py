@@ -21,12 +21,10 @@ def parse_definitions_file(definitions_filepath: Path):
                     def_dict[dict_key] = {}
 
                 elif line[0] == '#define' and len(line) == 3:
-                    new_key = line[1].lower()
-
                     if line[2].startswith('0x'):
-                        def_dict[dict_key][new_key] = int(line[2][2:], 16)
+                        def_dict[dict_key][line[1]] = int(line[2][2:], 16)
                     else:
-                        def_dict[dict_key][new_key] = int(line[2])
+                        def_dict[dict_key][line[1]] = int(line[2])
 
         else:
             raise Exception("File mode != r")
@@ -35,3 +33,11 @@ def parse_definitions_file(definitions_filepath: Path):
         raise Exception("Filepath is not a file")
 
     return def_dict
+
+
+if __name__ == "__main__":
+    project_dir = Path(__file__).resolve().parents[1]
+    header_file = project_dir / 'arduino/engineering-team-motor/definitions.h'
+
+    print(parse_definitions_file(header_file))
+    
