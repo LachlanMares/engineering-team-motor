@@ -5,7 +5,6 @@
 // serial_settings
 #define BAUD_RATE                           250000
 #define SERIAL_BUFFER_LENGTH                256
-#define STATUS_MESSAGE_LENGTH               54
 #define SERIAL_TIMEOUT_MS                   100
 #define STX                                 0x02
 #define ETX                                 0x03
@@ -24,7 +23,7 @@
 #define STATUS_MESSAGE_TASK_ID  2
 #define STATUS_MESSAGE_INTERVAL_US  250000
 #define MOTOR_FEEDBACK_TASK_ID  3
-#define MOTOR_FEEDBACK_INTERVAL_US  20000
+#define MOTOR_FEEDBACK_INTERVAL_US  10000
 
 // io_settings
 #define MOTOR_INT_PIN_A 2
@@ -56,6 +55,13 @@
 #define RESPONSE_MESSAGE_ID                 0xFC
 #define JOB_COMPLETE_MESSAGE_ID             0xFA
 #define JOB_CANCELLED_MESSAGE_ID            0xF9
+
+// message_lengths
+#define MOTOR_STATUS_MESSAGE_LENGTH         8
+#define MOTOR_FEEDBACK_MESSAGE_LENGTH       11
+#define RESPONSE_MESSAGE_LENGTH             4
+#define JOB_COMPLETE_MESSAGE_LENGTH         2
+#define JOB_CANCELLED_MESSAGE_LENGTH        2
 
 // command_types
 #define SEND_JOB                            0xEF
@@ -90,7 +96,7 @@
 #define WAKE_WITH_ACTIVE_JOB_RESPONSE       0xD0
 
 // motor
-#define MOTOR_ID                            0xA0
+#define MOTOR_ID                            0x00
 #define MOTOR_STEPS_PER_REV                 200
 #define MINIMUM_PULSE_INTERVAL_US           500
 #define DEFAULT_PULSE_ON_PERIOD             500

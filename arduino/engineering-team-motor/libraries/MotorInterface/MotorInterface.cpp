@@ -1,6 +1,6 @@
 #include "MotorInterface.h"
 
-MotorInterface::MotorInterface(unsigned long update_period_us, int ppr) : QuadratureEncoder(update_period_us, ppr) {
+MotorInterface::MotorInterface(unsigned long update_period_us, int ppr, bool filter) : QuadratureEncoder(update_period_us, ppr, filter) {
     _output_state = false;
 
     status_variables.direction = false;
@@ -239,22 +239,14 @@ void MotorInterface::ResetJobId() {
 }
 
 bool MotorInterface::Update(unsigned long micros_now) {
-    if (updateEncoder(micros_now)) {
+    if (updateEncoderVelocity(micros_now)) {
+        /*
         encoder.direction = getEncoderDirection();
         encoder.count = getEncoderCount();
         encoder.angle_count = getEncoderAngleCount();
         encoder.angle_radians = getEncoderAngleRadians();
-        
-        float velocity_sum = 0.0;
-
-        // Basic moving average filter, move previous readings
-        for (uint8_t i=1; i<MAF_FILTER_LENGTH; i++) {
-            filter_buffer[i-1] = filter_buffer[i]; 
-            velocity_sum += filter_buffer[i-1];
-        }
-
-        filter_buffer[MAF_FILTER_LENGTH-1] = getEncoderVelocityRadians();
-        encoder.velocity_radians = (velocity_sum + filter_buffer[MAF_FILTER_LENGTH-1]) / MAF_FILTER_LENGTH;
+        encoder.velocity_radians = getEncoderVelocityRadians();
+        */
     }
 
     bool job_done = false;
@@ -329,7 +321,6 @@ bool MotorInterface::FaultCheck() {
     return status_variables.fault;
 }
 
-
 void MotorInterface::UpdateStatus() {
     bitWrite(status_byte, DIRECTION_BIT, status_variables.direction); // Bit 0
     bitWrite(status_byte, FAULT_BIT, status_variables.fault); // Bit 1
@@ -340,3 +331,5 @@ void MotorInterface::UpdateStatus() {
     bitWrite(status_byte, RUNNING_BIT, status_variables.running); // Bit 6
     bitWrite(status_byte, SLEEP_BIT, status_variables.sleep); // Bit 7
 }
+
+

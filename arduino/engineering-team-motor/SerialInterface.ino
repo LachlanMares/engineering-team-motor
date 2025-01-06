@@ -19,27 +19,33 @@ void updateSerial() {
   if (scheduler.taskReady(STATUS_MESSAGE_TASK_ID)) {
     motor.UpdateStatus();
 
-    uint8_t motor_status_buffer[8];
+    uint8_t motor_status_buffer[MOTOR_STATUS_MESSAGE_LENGTH];
     motor_status_buffer[0] = MOTOR_STATUS_MESSAGE_ID;
     motor_status_buffer[1] = motor.status_byte;
     motor_status_buffer[2] = motor.status_variables.job_id; 
     motor_status_buffer[3] = motor.status_variables.microstep;
-    bytesFromUnsignedLong(motor.status_variables.pulses_remaining, &motor_status_buffer[3]);
 
-    serialport.sendMessage(&motor_status_buffer[0], 8);
+    memcpy(motor_status_buffer[4], &motor.status_variables.pulses_remaining, sizeof(unsigned long));
+
+    serialport.sendMessage(&motor_status_buffer[0], MOTOR_STATUS_MESSAGE_LENGTH);
   }
 
   if (scheduler.taskReady(MOTOR_FEEDBACK_TASK_ID)) {
-    uint8_t motor_feedback_buffer[9];
+    uint8_t motor_feedback_buffer[MOTOR_FEEDBACK_MESSAGE_LENGTH];
     motor_feedback_buffer[0] = MOTOR_FEEDBACK_MESSAGE_ID;
-    bytesFromFloat32Bit(motor.encoder.velocity_radians, &motor_feedback_buffer[1]);
-    bytesFromFloat32Bit(motor.encoder.angle_radians, &motor_feedback_buffer[5]);
-    serialport.sendMessage(&motor_feedback_buffer[0], 9);
+
+    float angle_radians = motor.getEncoderAngleRadians();
+
+    memcpy(motor_feedback_buffer[1], &motor.encoder_status.velocity_radians, sizeof(float));
+    memcpy(motor_feedback_buffer[5], &angle_radians, sizeof(float));
+    memcpy(motor_feedback_buffer[9], &motor.encoder_status.angle_count, sizeof(int));
+
+    serialport.sendMessage(&motor_feedback_buffer[0], MOTOR_FEEDBACK_MESSAGE_LENGTH);
   }
 }
 
 void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int bytes_read) {
-  uint8_t response_buffer[4] = {RESPONSE_MESSAGE_ID, serial_buffer[1], UNKNOWN_MOTOR_COMMAND_RESPONSE, NAK};
+  uint8_t response_buffer[RESPONSE_MESSAGE_LENGTH] = {RESPONSE_MESSAGE_ID, serial_buffer[1], UNKNOWN_MOTOR_COMMAND_RESPONSE, NAK};
 
   switch(serial_buffer[1]) {
 
@@ -242,7 +248,6 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
               response_buffer[2] = MOTOR_DISABLED_RESPONSE;
               response_buffer[3] = NAK;
             }
-
       break;
 
     case CANCEL_JOB:
@@ -251,7 +256,7 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
           if(motor_ptr->status_variables.running) {
             motor_ptr->CancelJob();
 
-            uint8_t job_cancelled_buffer[2] = {JOB_CANCELLED_MESSAGE_ID, motor_ptr->status_variables.job_id};
+            uint8_t job_cancelled_buffer[JOB_CANCELLED_MESSAGE_LENGTH] = {JOB_CANCELLED_MESSAGE_ID, motor_ptr->status_variables.job_id};
             serialport.sendMessage(&job_cancelled_buffer[0], 2);
 
             motor_ptr->ResetJobId();
@@ -390,5 +395,5 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
       break;
   }
 
-  serialport.sendMessage(&response_buffer[0], 4);
+  serialport.sendMessage(&response_buffer[0], RESPONSE_MESSAGE_LENGTH);
 }

@@ -3,7 +3,7 @@
 #include <ScheduleMicro.h>
 #include <AtSerial.h>
 
-MotorInterface motor(ENCODER_UPDATE_PERIOD_US, ENCODER_PULSES_PER_REVOLUTION);
+MotorInterface motor(ENCODER_UPDATE_PERIOD_US, ENCODER_PULSES_PER_REVOLUTION, true);
 ScheduleMicro scheduler(PRINT_INTERVAL_US, FAULT_CHECK_INTERVAL_US, STATUS_MESSAGE_INTERVAL_US, MOTOR_FEEDBACK_INTERVAL_US);
 AtSerial serialport;
 

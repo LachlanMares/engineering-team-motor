@@ -3,6 +3,8 @@
 
 #include "Arduino.h"
 
+#define ENC_MAF_FILTER_LENGTH  10
+
 struct encoder_struct {
   bool direction;
   float velocity_count;
@@ -16,10 +18,10 @@ struct encoder_struct {
 
 class QuadratureEncoder{
         public:  
-                QuadratureEncoder(unsigned long micros_period, int ppr);            
-                void interruptUpdateABExternal(bool a, bool b);
-                void interruptUpdateZExternal(bool z);
-                bool updateEncoder(unsigned long micros_now);
+                QuadratureEncoder(unsigned long micros_period, int ppr, bool filter);            
+                void interruptUpdateABExternal(bool a, bool b, bool z);
+                void interruptUpdateZExternal(bool a, bool b);
+                bool updateEncoderVelocity(unsigned long micros_now);
                 bool getEncoderDirection();
                 long getEncoderCount();
                 long getEncoderDelta();
@@ -28,8 +30,11 @@ class QuadratureEncoder{
                 float getEncoderAngleRadians();
                 float getEncoderVelocity();
                 long getEncoderErrorCount();
+                encoder_struct encoder_status;
     
         private:
+                bool previous_z;
+                bool use_filter;
                 uint8_t previous_state = 0;
                 int pulses_per_revolution;
                 int angle_count_int = 0;
@@ -38,7 +43,8 @@ class QuadratureEncoder{
                 long previous_encoder_count = 0;
                 unsigned long previous_micros_now = 0;
                 unsigned long update_micros_period = 0;
-                encoder_struct encoder_status;
+                float filter_buffer[ENC_MAF_FILTER_LENGTH];
+                
 };
 
 #endif

@@ -21,8 +21,6 @@
 #define MINIMUM_PULSE_INTERVAL              500
 #define MAXIMUM_PULSE_INTERVAL              1000000
 
-#define MAF_FILTER_LENGTH  10
-
 struct motor_command_struct {
   bool direction;
   bool use_ramping;
@@ -65,7 +63,7 @@ struct encoder_status_struct {
 
 class MotorInterface : public QuadratureEncoder {
   public:
-    MotorInterface(unsigned long update_period_us, int ppr);
+    MotorInterface(unsigned long update_period_us, int ppr, bool filter);
     void Init(int direction_pin, int step_pin, int sleep_pin, int reset_pin, int fault_pin, int m0_pin, int m1_pin, int m2_pin, int enable_pin);
     void Enable();
     void Disable();
@@ -92,7 +90,6 @@ class MotorInterface : public QuadratureEncoder {
 
     bool _output_state;
     int _direction_pin, _step_pin, _sleep_pin, _reset_pin, _fault_pin, _m0_pin, _m1_pin, _m2_pin, _enable_pin;
-    float filter_buffer[MAF_FILTER_LENGTH];
     unsigned long _last_pulse_on_micros, _last_pulse_off_micros; 
 };
 
