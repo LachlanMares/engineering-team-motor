@@ -25,7 +25,7 @@ void updateSerial() {
     motor_status_buffer[2] = motor.status_variables.job_id; 
     motor_status_buffer[3] = motor.status_variables.microstep;
 
-    memcpy(motor_status_buffer[4], &motor.status_variables.pulses_remaining, sizeof(unsigned long));
+    memcpy(&motor_status_buffer[4], &motor.status_variables.pulses_remaining, sizeof(unsigned long));
 
     serialport.sendMessage(&motor_status_buffer[0], MOTOR_STATUS_MESSAGE_LENGTH);
   }
@@ -36,9 +36,9 @@ void updateSerial() {
 
     float angle_radians = motor.getEncoderAngleRadians();
 
-    memcpy(motor_feedback_buffer[1], &motor.encoder_status.velocity_radians, sizeof(float));
-    memcpy(motor_feedback_buffer[5], &angle_radians, sizeof(float));
-    memcpy(motor_feedback_buffer[9], &motor.encoder_status.angle_count, sizeof(int));
+    memcpy(&motor_feedback_buffer[1], &motor.encoder_status.velocity_radians, sizeof(float));
+    memcpy(&motor_feedback_buffer[5], &angle_radians, sizeof(float));
+    memcpy(&motor_feedback_buffer[9], &motor.encoder_status.angle_count, sizeof(int));
 
     serialport.sendMessage(&motor_feedback_buffer[0], MOTOR_FEEDBACK_MESSAGE_LENGTH);
   }

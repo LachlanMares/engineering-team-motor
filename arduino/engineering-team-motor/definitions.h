@@ -13,7 +13,7 @@
 
 // encoder_settings
 #define ENCODER_UPDATE_PERIOD_US  10000
-#define ENCODER_PULSES_PER_REVOLUTION  1600
+#define ENCODER_PULSES_PER_REVOLUTION  2400
 
 // schedule_settings
 #define PRINT_TASK_ID  0
@@ -34,10 +34,10 @@
 #define SLEEP_PIN 7
 #define RESET_PIN 8
 #define FAULT_PIN 9
-#define M0_PIN 10
-#define M1_PIN 11
-#define M2_PIN 12
-#define ENABLE_PIN 13
+#define M0_PIN 14
+#define M1_PIN 15
+#define M2_PIN 16
+#define ENABLE_PIN 10
 
 // status_message_bits
 #define STATUS_DIRECTION_BIT                0

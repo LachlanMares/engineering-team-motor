@@ -2,23 +2,33 @@
 // "// some_text" will be a python dictionary key until next "// other_text". 
 // Do not put comments at the end of #define lines
 
+// encoder_settings
+#define ENCODER_UPDATE_PERIOD_US  10000
+#define ENCODER_PULSES_PER_REVOLUTION  2400
+
 // schedule_settings
 #define PRINT_TASK_ID  0
 #define PRINT_INTERVAL_US  100000
-#define JOB_INTERVAL_TASK_ID  1
-#define JOB_INTERVAL_US  100000
-#define FAULT_CHECK_TASK_ID  2
+#define FAULT_CHECK_TASK_ID  1
 #define FAULT_CHECK_INTERVAL_US  100000
+#define JOB_INTERVAL_TASK_ID  2
+#define JOB_INTERVAL_INTERVAL_US 250000
+#define MOTOR_FEEDBACK_TASK_ID  3
+#define MOTOR_FEEDBACK_INTERVAL_US  10000
 
+// io_settings
+#define MOTOR_INT_PIN_A 2
+#define MOTOR_INT_PIN_B 3
+#define MOTOR_INT_PIN_Z 4
 #define DIRECTION_PIN 5
 #define STEP_PIN 6
 #define SLEEP_PIN 7
 #define RESET_PIN 8
 #define FAULT_PIN 9
-#define M0_PIN 10
-#define M1_PIN 11
-#define M2_PIN 12
-#define ENABLE_PIN 13
+#define M0_PIN 14
+#define M1_PIN 15
+#define M2_PIN 16
+#define ENABLE_PIN 10
 
 // status_message_bits
 #define STATUS_DIRECTION_BIT                0
@@ -72,9 +82,9 @@
 // motor
 #define MOTOR_ID                            0xA0
 #define MOTOR_STEPS_PER_REV                 200
-#define MINIMUM_PULSE_INTERVAL_US           500
+#define MINIMUM_PULSE_INTERVAL_US           3000
 #define DEFAULT_PULSE_ON_PERIOD             500
 #define DEFAULT_PULSE_INTERVAL              1000
 #define DEFAULT_RAMP_STEPS                  50
-#define MINIMUM_PULSE_INTERVAL              500
+#define MINIMUM_PULSE_INTERVAL              3000
 #define MAXIMUM_PULSE_INTERVAL              1000000

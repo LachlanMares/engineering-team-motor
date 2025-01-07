@@ -54,7 +54,7 @@ void MotorInterface::Init(int direction_pin, int step_pin, int sleep_pin, int re
     pinMode(_step_pin, OUTPUT);
     pinMode(_sleep_pin, OUTPUT);
     pinMode(_reset_pin, OUTPUT);
-    pinMode(_fault_pin, INPUT_PULLUP);
+    pinMode(_fault_pin, INPUT);
     pinMode(_m0_pin, OUTPUT);
     pinMode(_m1_pin, OUTPUT);
     pinMode(_m2_pin, OUTPUT);
@@ -92,12 +92,12 @@ void MotorInterface::Sleep() {
 
 void MotorInterface::Reset() {
     digitalWrite(_reset_pin, LOW);
-    delay(1);
+    delay(10);
     digitalWrite(_reset_pin, HIGH);
 }
 
 boolean MotorInterface::FaultStatus() {
-    return false; // !digitalRead(_fault_pin);
+    return !digitalRead(_fault_pin);
 }
 
 void MotorInterface::DecodeMicroStep() {
@@ -149,14 +149,17 @@ void MotorInterface::DecodeMicroStep() {
 }
 
 void MotorInterface::StartJob() {
-    status_variables.fault = FaultStatus();
+    //status_variables.fault = FaultStatus();
 
     if(status_variables.fault) {
         status_variables.running = false;
         Sleep();
         Disable();
+        Reset();
 
     } else {
+        Enable();
+        Wake();
 
         status_variables.running = true;
         status_variables.direction = command_variables.direction;
@@ -168,15 +171,6 @@ void MotorInterface::StartJob() {
         _output_state = false;
         _last_pulse_on_micros = 0;
         _last_pulse_off_micros = 0;
-
-        if (status_variables.sleep) {
-            Wake();
-            Reset();
-        }
-
-        if (!status_variables.enabled) {
-            Enable();
-        }
 
         digitalWrite(_direction_pin, status_variables.direction ? HIGH : LOW);
         digitalWrite(_step_pin, LOW);
@@ -214,6 +208,21 @@ void MotorInterface::StartJob() {
             status_variables.ramp_interval_step = 0;
             status_variables.ramp_pulse_interval = 0;
         }
+
+        Serial.print("Job ");
+        Serial.print(status_variables.running);
+        Serial.print(" D ");
+        Serial.print(status_variables.direction);
+        Serial.print(" PR ");
+        Serial.print(status_variables.pulses_remaining);
+        Serial.print(" UR ");
+        Serial.print(status_variables.use_ramping);
+        Serial.print(" MS ");
+        Serial.print(status_variables.microstep);
+        Serial.print(" PI ");
+        Serial.print(status_variables.pulse_interval);
+        Serial.print(" POP ");
+        Serial.println(status_variables.pulse_on_period);
     }
 }
 
@@ -231,6 +240,8 @@ void MotorInterface::CancelJob() {
     status_variables.running = false;
     _output_state = false;
     status_variables.pulses_remaining = 0;
+    status_variables.enabled = false;
+    ResetJobId();
     digitalWrite(_step_pin, LOW);
 }
 
