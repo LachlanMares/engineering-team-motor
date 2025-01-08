@@ -3,7 +3,7 @@
 // Do not put comments at the end of #define lines
 
 // serial_settings
-#define BAUD_RATE                           250000
+#define BAUD_RATE                           1000000
 #define SERIAL_BUFFER_LENGTH                256
 #define SERIAL_TIMEOUT_MS                   100
 #define STX                                 0x02
@@ -12,17 +12,15 @@
 #define NAK                                 0x15
 
 // encoder_settings
-#define ENCODER_UPDATE_PERIOD_US  10000
+#define ENCODER_UPDATE_PERIOD_US  25000
 #define ENCODER_PULSES_PER_REVOLUTION  2400
 
 // schedule_settings
-#define PRINT_TASK_ID  0
-#define PRINT_INTERVAL_US  100000
-#define FAULT_CHECK_TASK_ID  1
+#define FAULT_CHECK_TASK_ID  0
 #define FAULT_CHECK_INTERVAL_US  100000
-#define STATUS_MESSAGE_TASK_ID  2
+#define STATUS_MESSAGE_TASK_ID  1
 #define STATUS_MESSAGE_INTERVAL_US  250000
-#define MOTOR_FEEDBACK_TASK_ID  3
+#define MOTOR_FEEDBACK_TASK_ID  2
 #define MOTOR_FEEDBACK_INTERVAL_US  10000
 
 // io_settings
@@ -98,9 +96,8 @@
 // motor_settings
 #define MOTOR_ID                            0x00
 #define MOTOR_STEPS_PER_REV                 200
-#define MINIMUM_PULSE_INTERVAL_US           500
 #define DEFAULT_PULSE_ON_PERIOD             500
-#define DEFAULT_PULSE_INTERVAL              1000
+#define DEFAULT_PULSE_INTERVAL              2000
 #define DEFAULT_RAMP_STEPS                  50
-#define MINIMUM_PULSE_INTERVAL              500
+#define MINIMUM_PULSE_INTERVAL              1000
 #define MAXIMUM_PULSE_INTERVAL              1000000

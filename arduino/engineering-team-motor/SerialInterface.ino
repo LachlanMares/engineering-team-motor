@@ -6,14 +6,7 @@ void updateSerial() {
   int bytes_read = serialport.update(&serial_buffer[0]);
 
   if(bytes_read > 0) {
-    switch(serial_buffer[0]) {
-      case MOTOR_ID:
-        processCommandMessage(&motor, MOTOR_ID, bytes_read);
-        break;
-
-      default:
-        break;
-    }
+    processCommandMessage(&motor, bytes_read);
   }
 
   if (scheduler.taskReady(STATUS_MESSAGE_TASK_ID)) {
@@ -39,16 +32,15 @@ void updateSerial() {
     memcpy(&motor_feedback_buffer[1], &motor.encoder_status.velocity_radians, sizeof(float));
     memcpy(&motor_feedback_buffer[5], &angle_radians, sizeof(float));
     memcpy(&motor_feedback_buffer[9], &motor.encoder_status.angle_count, sizeof(int));
-
+    
     serialport.sendMessage(&motor_feedback_buffer[0], MOTOR_FEEDBACK_MESSAGE_LENGTH);
   }
 }
 
-void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int bytes_read) {
-  uint8_t response_buffer[RESPONSE_MESSAGE_LENGTH] = {RESPONSE_MESSAGE_ID, serial_buffer[1], UNKNOWN_MOTOR_COMMAND_RESPONSE, NAK};
+void processCommandMessage(MotorInterface* motor_ptr, int bytes_read) {
+  uint8_t response_buffer[RESPONSE_MESSAGE_LENGTH] = {RESPONSE_MESSAGE_ID, serial_buffer[0], UNKNOWN_MOTOR_COMMAND_RESPONSE, NAK};
 
-  switch(serial_buffer[1]) {
-
+  switch(serial_buffer[0]) {
     case SEND_JOB:
       if(motor_ptr->status_variables.fault) {
         response_buffer[2] = MOTOR_IN_FAULT_RESPONSE;
@@ -66,12 +58,12 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
               response_buffer[2] = MOTOR_IN_SLEEP_RESPONSE;
               response_buffer[3] = NAK;
 
-            } else if (bytes_read == 9) {
+            } else if (bytes_read == 8) {
                 motor_ptr->command_variables.use_ramping = false;
-                motor_ptr->command_variables.direction = (serial_buffer[2] > 0) ? true : false;
-                motor_ptr->command_variables.microstep = serial_buffer[3];
-                motor_ptr->command_variables.job_id = serial_buffer[4];
-                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[5]);
+                motor_ptr->command_variables.direction = (serial_buffer[1] > 0) ? true : false;
+                motor_ptr->command_variables.microstep = serial_buffer[2];
+                motor_ptr->command_variables.job_id = serial_buffer[3];
+                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[4]);
                 motor_ptr->command_variables.pulse_interval = 0;
                 motor_ptr->command_variables.pulse_on_period = 0;
                 motor_ptr->command_variables.ramping_steps = 0;
@@ -102,13 +94,13 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
               response_buffer[2] = MOTOR_IN_SLEEP_RESPONSE;
               response_buffer[3] = NAK;
 
-            } else if (bytes_read == 13) {
+            } else if (bytes_read == 12) {
                 motor_ptr->command_variables.use_ramping = true;
-                motor_ptr->command_variables.direction = (serial_buffer[2] > 0) ? true : false;
-                motor_ptr->command_variables.microstep = serial_buffer[3];
-                motor_ptr->command_variables.job_id = serial_buffer[4];
-                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[5]);
-                motor_ptr->command_variables.ramping_steps = longFromBytes(&serial_buffer[9]);
+                motor_ptr->command_variables.direction = (serial_buffer[1] > 0) ? true : false;
+                motor_ptr->command_variables.microstep = serial_buffer[2];
+                motor_ptr->command_variables.job_id = serial_buffer[3];
+                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[4]);
+                motor_ptr->command_variables.ramping_steps = longFromBytes(&serial_buffer[8]);
                 motor_ptr->command_variables.pulse_interval = 0;
                 motor_ptr->command_variables.pulse_on_period = 0;
                 motor_ptr->StartJob();
@@ -123,7 +115,7 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
 
     case SEND_JOB_ALL_VARIABLES:
 
-      if(motor_ptr->status_variables.fault) {
+      if(false) { //motor_ptr->status_variables.fault) {
         response_buffer[2] = MOTOR_IN_FAULT_RESPONSE;
         response_buffer[3] = NAK;
 
@@ -139,14 +131,14 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
               response_buffer[2] = MOTOR_IN_SLEEP_RESPONSE;
               response_buffer[3] = NAK;
 
-            } else if (bytes_read == 17) {
+            } else if (bytes_read == 16) {
                 motor_ptr->command_variables.use_ramping = false;
-                motor_ptr->command_variables.direction = (serial_buffer[2] > 0) ? true : false;
-                motor_ptr->command_variables.microstep = serial_buffer[3];
-                motor_ptr->command_variables.job_id = serial_buffer[4];
-                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[5]);
-                motor_ptr->command_variables.pulse_interval = longFromBytes(&serial_buffer[9]);
-                motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[13]);
+                motor_ptr->command_variables.direction = (serial_buffer[1] > 0) ? true : false;
+                motor_ptr->command_variables.microstep = serial_buffer[2];
+                motor_ptr->command_variables.job_id = serial_buffer[3];
+                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[4]);
+                motor_ptr->command_variables.pulse_interval = longFromBytes(&serial_buffer[8]);
+                motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[12]);
                 motor_ptr->StartJob();
                 response_buffer[2] = 0x00;
                 response_buffer[3] = ACK;
@@ -175,15 +167,15 @@ void processCommandMessage(MotorInterface* motor_ptr, uint8_t motor_num, int byt
               response_buffer[2] = MOTOR_IN_SLEEP_RESPONSE;
               response_buffer[3] = NAK;
 
-            } else if (bytes_read == 21) {
+            } else if (bytes_read == 20) {
                 motor_ptr->command_variables.use_ramping = true;
-                motor_ptr->command_variables.direction = (serial_buffer[2] > 0) ? true : false;;
-                motor_ptr->command_variables.microstep = serial_buffer[3];
-                motor_ptr->command_variables.job_id = serial_buffer[4];
-                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[5]);
-                motor_ptr->command_variables.pulse_interval = longFromBytes(&serial_buffer[9]);
-                motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[13]);
-                motor_ptr->command_variables.ramping_steps = longFromBytes(&serial_buffer[17]);
+                motor_ptr->command_variables.direction = (serial_buffer[1] > 0) ? true : false;;
+                motor_ptr->command_variables.microstep = serial_buffer[2];
+                motor_ptr->command_variables.job_id = serial_buffer[3];
+                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[4]);
+                motor_ptr->command_variables.pulse_interval = longFromBytes(&serial_buffer[8]);
+                motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[12]);
+                motor_ptr->command_variables.ramping_steps = longFromBytes(&serial_buffer[16]);
                 motor_ptr->StartJob();
                 response_buffer[2] = 0x00;
                 response_buffer[3] = ACK;                

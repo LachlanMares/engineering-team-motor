@@ -51,10 +51,10 @@ int AtSerial::update(unsigned char* ext_buffer) {
 void AtSerial::sendMessage(unsigned char* buffer_start, int msg_length) {
     unsigned char packet[msg_length+3];
     packet[0] = STX;
-    packet[1] = (unsigned char) msg_length+3;
+    packet[1] = (unsigned char) msg_length + 3;
     packet[msg_length+2] = ETX;
     memcpy(&packet[2], buffer_start, msg_length);
-    Serial.write(packet, msg_length+3);
+    Serial.write(packet, msg_length + 3);
 }
 
 

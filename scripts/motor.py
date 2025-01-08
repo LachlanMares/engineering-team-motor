@@ -7,21 +7,26 @@ import threading
 import serial
 import queue
 from typing import Union
+from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
+from scripts import parse_definitions_file
+
 
 class Motor:
-    def __init__(self, definitions: dict, serial_port: Union[str, None] = None):
+    def __init__(self, definitions_filepath: Path, serial_port: Union[str, None] = None):
         """
         Description:
 
         Args:
             serial_port (str): Default serial port path as string
-            definitions (dict): Parsed header file used by the Arduino
         """
         # Serial settings
         self.serial_port_name = serial_port
+
+        definitions = parse_definitions_file(definitions_filepath)
+
         self.baud_rate = definitions['serial_settings']['BAUD_RATE']
         self.byte_STX = struct.pack('!B', definitions['serial_settings']['STX'])
 
@@ -58,8 +63,8 @@ class Motor:
         self.response_dict = definitions['response_types']
 
         self.microsteps = [1, 2, 4, 8, 16, 32]
-        self.minimum_pulse_interval_us = definitions['motor']['MINIMUM_PULSE_INTERVAL_US']
-        self.motor_pulses_per_revolution = definitions['motor']['MOTOR_STEPS_PER_REV']
+        self.minimum_pulse_interval_us = definitions['motor_settings']['MINIMUM_PULSE_INTERVAL']
+        self.motor_pulses_per_revolution = definitions['motor_settings']['MOTOR_STEPS_PER_REV']
         self.max_pulses_per_second = 1e6 / self.minimum_pulse_interval_us
         max_motor_rpm = (self.max_pulses_per_second / self.motor_pulses_per_revolution) * 60
         self.max_motor_rpm_list = [max_motor_rpm / j for j in self.microsteps]
@@ -73,13 +78,14 @@ class Motor:
         self.current_job_pulses_remaining = 0
         self.current_motor_velocity = 0.0
         self.current_motor_position = 0.0
+        self.current_motor_encoder_count = 0
 
         # Incoming messages don't include header or footer bytes
-        self.motor_status_message_struct = struct.Struct('!4BL')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining}
-        self.motor_feedback_message_struct = struct.Struct('!B2f')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder.velocity_radians, motor.encoder.angle_radians}
-        self.response_message_struct = struct.Struct('!4B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK]};
-        self.job_complete_message_struct = struct.Struct('!2B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id}
-        self.job_cancelled_message_struct = struct.Struct('!2B')  # {JOB_CANCELLED_MESSAGE_ID, motor_ptr.status_variables.job_id};
+        self.motor_status_message_struct = struct.Struct('<4BLB')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining}
+        self.motor_feedback_message_struct = struct.Struct('<B2fhB')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder_status.velocity_radians, motor.encoder.angle_radians, motor.encoder_status.angle_count}
+        self.response_message_struct = struct.Struct('<5B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK]};
+        self.job_complete_message_struct = struct.Struct('<3B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id}
+        self.job_cancelled_message_struct = struct.Struct('<3B')  # {JOB_CANCELLED_MESSAGE_ID, motor_ptr.status_variables.job_id};
 
         self.send_queue = queue.Queue(maxsize=20)
         self.receive_queue = queue.Queue(maxsize=20)
@@ -91,7 +97,7 @@ class Motor:
         self.ser = None
         self.connected = False
 
-    def start_thread(self):
+    def start_threads(self):
         """
         Description:
             Starts serial communications in a separate thread.
@@ -152,20 +158,31 @@ class Motor:
         while self.running:
             # A check to see if serial port is open
             if self.ser.isOpen():
-                new_message_id, serial_buffer = self.get_serial_message()
+                new_message_id = 1
 
-                if new_message_id != 0:
-                    try:
-                        self.receive_queue.put({"id": new_message_id,
-                                                "msg": serial_buffer})
-                    except queue.Full:
-                        print(f'Receive queue is full')
+                while new_message_id != 0:
+                    new_message_id, serial_buffer = self.get_serial_message()
 
-                    except Exception as e:
-                        print(f'Exception {e}')
+                    if new_message_id == self.motor_feedback_message_id:
+                        feedback_message = self.motor_feedback_message_struct.unpack(serial_buffer)
+                        self.current_motor_velocity = feedback_message[1]
+                        self.current_motor_position = feedback_message[2]
+                        self.current_motor_encoder_count = feedback_message[3]
+
+                    else:
+                        try:
+                            self.receive_queue.put({"id": new_message_id,
+                                                    "msg": serial_buffer})
+                        except queue.Full:
+                            new_message_id = 0
+                            print(f'Receive queue is full')
+
+                        except Exception as e:
+                            new_message_id = 0
+                            print(f'Exception {e}')
 
                 try:
-                    new_message = self.send_queue.get(timeout=0.01)
+                    new_message = self.send_queue.get(timeout=0.001)
                     self.ser.write(new_message)
 
                 except queue.Empty:
@@ -179,7 +196,7 @@ class Motor:
                 self.connected = False
                 self.connect_serial_port()
 
-            time.sleep(0.01)
+            time.sleep(0.0001)
 
         self.ser.close()
 
@@ -196,7 +213,8 @@ class Motor:
         if self.ser.inWaiting() != 0:
             if self.ser.read() == self.byte_STX:
                 message_length = self.ser.read()
-                serial_buffer = self.ser.read(int.from_bytes(message_length, "big") - 2)
+
+                serial_buffer = self.ser.read(int.from_bytes(message_length, "little") - 2)
 
                 if serial_buffer[-1] == self.ETX:
                     return serial_buffer[0], serial_buffer
@@ -235,6 +253,8 @@ class Motor:
 
                 pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
                 required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution) * best_step_choice
+
+                print(f"{pulse_interval=}, {required_pulses=}, {best_step_choice=}")
 
                 return self.send_motor_pulses(direction=direction,
                                               microstep=best_step_choice,
@@ -301,14 +321,14 @@ class Motor:
         required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution) * m_step
 
         self.send_motor_pulses(direction=direction,
-                                      microstep=m_step,
-                                      pulses=required_pulses,
-                                      pulse_interval=pulse_interval,
-                                      pulse_on_period=pulse_on_period,
-                                      use_ramping=use_ramping,
-                                      ramping_steps=ramping_steps,
-                                      job_id=job_id,
-                                      )
+                               microstep=m_step,
+                               pulses=required_pulses,
+                               pulse_interval=pulse_interval,
+                               pulse_on_period=pulse_on_period,
+                               use_ramping=use_ramping,
+                               ramping_steps=ramping_steps,
+                               job_id=job_id,
+                               )
 
     def send_motor_pulses(self,
                           direction: bool,
@@ -393,15 +413,16 @@ class Motor:
         start_time = time.time()
 
         while not self.job_feedback_event.is_set():
-            time.sleep(0.1)
-            if time.time() - start_time > 2:
+            time.sleep(0.01)
+            if time.time() - start_time > 2.0:
                 self.job_active = False
                 self.job_pending = False
                 self.job_response_code = -1
-                return -1
+
+                print(f"Job confirmation failure")
 
     def send_pause_job(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['PAUSE_JOB'],
@@ -409,7 +430,7 @@ class Motor:
                                         ))
 
     def send_resume_job(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                             self.STX,
                             4,
                             self.command_dict['RESUME_JOB'],
@@ -417,7 +438,7 @@ class Motor:
                             ))
 
     def send_cancel_job(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['CANCEL_JOB'],
@@ -426,7 +447,7 @@ class Motor:
 
 
     def send_enable_motor(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['ENABLE_MOTOR'],
@@ -434,7 +455,7 @@ class Motor:
                                         ))
 
     def send_disable_motor(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['DISABLE_MOTOR'],
@@ -442,7 +463,7 @@ class Motor:
                                         ))
 
     def send_sleep_motor(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['SLEEP_MOTOR'],
@@ -450,7 +471,7 @@ class Motor:
                                         ))
 
     def send_wake_motor(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['WAKE_MOTOR'],
@@ -458,7 +479,7 @@ class Motor:
                                         ))
 
     def send_reset_motor(self):
-        self.send_queue.put(struct.pack('!4B',
+        self.send_queue.put(struct.pack('<4B',
                                         self.STX,
                                         4,
                                         self.command_dict['RESET_MOTOR'],
@@ -475,11 +496,6 @@ class Motor:
                     self.current_job_id = status_message[1]
                     self.current_microstep = status_message[2]
                     self.current_job_pulses_remaining = status_message[3]
-
-                elif new_message_dict["id"] == self.motor_feedback_message_id:
-                    feedback_message = self.motor_feedback_message_struct.unpack(new_message_dict["msg"])
-                    self.current_motor_velocity = feedback_message[1]
-                    self.current_motor_position = feedback_message[2]
 
                 elif new_message_dict["id"] == self.response_message_id:
                     response_message = self.response_message_struct.unpack(new_message_dict["msg"])
@@ -503,7 +519,41 @@ class Motor:
                         self.job_active = False
 
             except queue.Empty:
-                pass
+                time.sleep(0.005)
 
             except Exception as e:
                 print(f'Exception {e}')
+
+
+if __name__ == "__main__":
+    project_dir = Path(__file__).resolve().parents[1]
+    header_file = project_dir / 'arduino/engineering-team-motor/definitions.h'
+
+    motor = Motor(definitions_filepath=header_file, serial_port='/dev/ttyACM0')
+    motor.start_threads()
+    motor.send_enable_motor()
+    motor.send_wake_motor()
+
+    while True:
+        # motor.send_motor_rotations(number_or_rotations=5,
+        #                            direction=True,
+        #                            microstep = 4,
+        #                            pulse_interval = 1000,
+        #                            pulse_on_period = 500,
+        #                            use_ramping = False,
+        #                            job_id = 1)
+
+
+        motor.send_motor_rotations_at_set_rpm(number_or_rotations=3,
+                                              rpm=120.0,
+                                              direction=False,
+                                              use_ramping=False,
+                                              job_id=1)
+
+        # motor.send_motor_pulses(direction=True,
+        #                         microstep=4,
+        #                         pulses=motor.motor_pulses_per_revolution*4,
+        #                         pulse_interval=10000,
+        #                         job_id=1)
+
+        time.sleep(5)

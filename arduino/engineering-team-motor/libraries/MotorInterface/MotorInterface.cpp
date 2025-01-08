@@ -97,7 +97,7 @@ void MotorInterface::Reset() {
 }
 
 boolean MotorInterface::FaultStatus() {
-    return !digitalRead(_fault_pin);
+    return false; // !digitalRead(_fault_pin);
 }
 
 void MotorInterface::DecodeMicroStep() {
@@ -149,7 +149,7 @@ void MotorInterface::DecodeMicroStep() {
 }
 
 void MotorInterface::StartJob() {
-    //status_variables.fault = FaultStatus();
+    // status_variables.fault = FaultStatus();
 
     if(status_variables.fault) {
         status_variables.running = false;
@@ -208,21 +208,6 @@ void MotorInterface::StartJob() {
             status_variables.ramp_interval_step = 0;
             status_variables.ramp_pulse_interval = 0;
         }
-
-        Serial.print("Job ");
-        Serial.print(status_variables.running);
-        Serial.print(" D ");
-        Serial.print(status_variables.direction);
-        Serial.print(" PR ");
-        Serial.print(status_variables.pulses_remaining);
-        Serial.print(" UR ");
-        Serial.print(status_variables.use_ramping);
-        Serial.print(" MS ");
-        Serial.print(status_variables.microstep);
-        Serial.print(" PI ");
-        Serial.print(status_variables.pulse_interval);
-        Serial.print(" POP ");
-        Serial.println(status_variables.pulse_on_period);
     }
 }
 
