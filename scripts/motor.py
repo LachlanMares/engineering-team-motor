@@ -65,6 +65,7 @@ class Motor:
         self.microsteps = [1, 2, 4, 8, 16, 32]
         self.minimum_pulse_interval_us = definitions['motor_settings']['MINIMUM_PULSE_INTERVAL']
         self.motor_pulses_per_revolution = definitions['motor_settings']['MOTOR_STEPS_PER_REV']
+        self.default_pulse_on_period = definitions['motor_settings']['DEFAULT_PULSE_ON_PERIOD']
         self.max_pulses_per_second = 1e6 / self.minimum_pulse_interval_us
         max_motor_rpm = (self.max_pulses_per_second / self.motor_pulses_per_revolution) * 60
         self.max_motor_rpm_list = [max_motor_rpm / j for j in self.microsteps]
@@ -239,7 +240,7 @@ class Motor:
                                               microstep=1,
                                               pulses=required_pulses,
                                               pulse_interval=self.minimum_pulse_interval_us,
-                                              pulse_on_period=None,
+                                              pulse_on_period=self.default_pulse_on_period,
                                               use_ramping=use_ramping,
                                               ramping_steps=ramping_steps,
                                               job_id=job_id,
@@ -260,7 +261,7 @@ class Motor:
                                               microstep=best_step_choice,
                                               pulses=required_pulses,
                                               pulse_interval=pulse_interval,
-                                              pulse_on_period=None,
+                                              pulse_on_period=self.default_pulse_on_period,
                                               use_ramping=use_ramping,
                                               ramping_steps=ramping_steps,
                                               job_id=job_id,
@@ -300,7 +301,7 @@ class Motor:
                                           microstep=best_step_choice,
                                           pulses=pulses,
                                           pulse_interval=pulse_interval,
-                                          pulse_on_period=None,
+                                          pulse_on_period=self.default_pulse_on_period,
                                           use_ramping=use_ramping,
                                           ramping_steps=ramping_steps,
                                           job_id=job_id,
@@ -420,6 +421,7 @@ class Motor:
                 self.job_response_code = -1
 
                 print(f"Job confirmation failure")
+                return -1
 
     def send_pause_job(self):
         self.send_queue.put(struct.pack('<4B',
@@ -545,15 +547,16 @@ if __name__ == "__main__":
 
 
         motor.send_motor_rotations_at_set_rpm(number_or_rotations=3,
-                                              rpm=120.0,
+                                              rpm=80.0,
                                               direction=False,
                                               use_ramping=False,
                                               job_id=1)
 
         # motor.send_motor_pulses(direction=True,
-        #                         microstep=4,
-        #                         pulses=motor.motor_pulses_per_revolution*4,
-        #                         pulse_interval=10000,
+        #                         microstep=1,
+        #                         pulses=100000,
+        #                         pulse_interval=1500,
+        #                         pulse_on_period=500,
         #                         job_id=1)
 
         time.sleep(5)
