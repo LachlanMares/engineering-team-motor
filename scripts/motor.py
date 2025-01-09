@@ -2,6 +2,7 @@
 
 import warnings
 import struct
+import math
 import time
 import threading
 import serial
@@ -9,6 +10,7 @@ import queue
 import random
 from typing import Union
 from pathlib import Path
+from copy import deepcopy
 
 warnings.filterwarnings("ignore")
 
@@ -39,9 +41,13 @@ class Motor:
         # Status message
         self.motor_status_dict = {}
 
+        # constants
+        self.two_pi = 2 * math.pi
+
         # encoder_settings
         self.encoder_update_period_us = definitions['encoder_settings']['ENCODER_UPDATE_PERIOD_US']
         self.encoder_pulses_per_revolution = definitions['encoder_settings']['ENCODER_PULSES_PER_REVOLUTION']
+        self.radians_per_encoder_pulse = self.two_pi / self.encoder_pulses_per_revolution
 
         # status_message_bits
         self.status_direction_bit = definitions['status_message_bits']['STATUS_DIRECTION_BIT']
@@ -84,6 +90,7 @@ class Motor:
         self.current_motor_position = 0.0
         self.current_motor_encoder_count = 0
 
+
         # Incoming messages don't include header or footer bytes
         self.motor_status_message_struct = struct.Struct('<4BLB')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining, ETX}
         self.motor_feedback_message_struct = struct.Struct('<B2fhB')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder_status.velocity_radians, motor.encoder.angle_radians, motor.encoder_status.angle_count, ETX}
@@ -96,6 +103,7 @@ class Motor:
         self.receive_queue = queue.Queue(maxsize=20)
         self.read_thread = None
         self.updating_thread = None
+        self.read_lock = threading.Lock()
         self.job_feedback_event = threading.Event()
         self.running = False      
         self.ser = None
@@ -169,9 +177,11 @@ class Motor:
 
                     if new_message_id == self.motor_feedback_message_id:
                         feedback_message = self.motor_feedback_message_struct.unpack(serial_buffer)
-                        self.current_motor_velocity = feedback_message[1]
-                        self.current_motor_position = feedback_message[2]
-                        self.current_motor_encoder_count = feedback_message[3]
+
+                        with self.read_lock:
+                            self.current_motor_velocity = feedback_message[1]
+                            self.current_motor_position = feedback_message[2]
+                            self.current_motor_encoder_count = feedback_message[3]
 
                     else:
                         try:
@@ -334,6 +344,64 @@ class Motor:
                                job_id=job_id,
                                )
 
+    def goto_rotor_position_radians(self,
+                                    desired_position: float,
+                                    direction: bool,
+                                    rpm: Union[float, int],
+                                    use_ramping: bool = False,
+                                    ramping_steps: int = 0,
+                                    job_id: int = 0,
+                                    ):
+
+        if rpm < 0:
+            return -1
+
+        elif rpm > self.max_motor_rpm_list[0]:
+            best_step_choice = self.microsteps[0]
+            pulse_interval = self.minimum_pulse_interval_us
+
+        else:
+            best_step_choice = 1
+            for (m_step, max_rpms) in zip(self.microsteps, self.max_motor_rpm_list):
+                if rpm < max_rpms:
+                    best_step_choice = m_step
+
+            pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
+
+        with self.read_lock:
+            current_motor_encoder_count = deepcopy(self.current_motor_encoder_count)
+
+        desired_motor_encoder_count = desired_position / self.radians_per_encoder_pulse
+
+        if direction:
+            if desired_motor_encoder_count >= current_motor_encoder_count:
+                delta_count = desired_motor_encoder_count - current_motor_encoder_count
+            else:
+                delta_count = self.encoder_pulses_per_revolution - (current_motor_encoder_count - desired_motor_encoder_count)
+        else:
+            if desired_motor_encoder_count <= current_motor_encoder_count:
+                delta_count = current_motor_encoder_count - desired_motor_encoder_count
+            else:
+                delta_count = self.encoder_pulses_per_revolution - (desired_motor_encoder_count - current_motor_encoder_count)
+
+        number_or_rotations = delta_count / self.encoder_pulses_per_revolution
+        required_pulses = int(number_or_rotations * self.motor_pulses_per_revolution) * best_step_choice
+
+        if required_pulses > 10:
+
+            self.send_motor_pulses(direction=direction,
+                                   microstep=best_step_choice,
+                                   pulses=required_pulses,
+                                   pulse_interval=pulse_interval,
+                                   pulse_on_period=self.default_pulse_on_period,
+                                   use_ramping=use_ramping,
+                                   ramping_steps=ramping_steps,
+                                   job_id=job_id,
+                                   )
+        else:
+            print(f"Rotor already at correct position {self.get_rotor_position():.3f}")
+            return -1
+
     def send_motor_pulses(self,
                           direction: bool,
                           microstep: int = 1,
@@ -427,6 +495,11 @@ class Motor:
 
                 print(f"Job confirmation failure")
                 return -1
+
+    def get_rotor_position(self):
+        with self.read_lock:
+            position = deepcopy(self.current_motor_position)
+        return position
 
     def send_pause_job(self):
         self.send_queue.put(struct.pack('<4B',
@@ -522,6 +595,7 @@ class Motor:
 
                     if job_complete_message[1] == self.current_job_id:
                         self.job_active = False
+                        self.send_sleep_motor()
 
                 elif new_message_dict["id"] == self.job_cancelled_message_id:
                     job_cancelled_message = self.job_cancelled_message_struct.unpack(new_message_dict["msg"])
@@ -536,6 +610,7 @@ class Motor:
                 print(f'Exception {e}')
 
 
+
 if __name__ == "__main__":
     project_dir = Path(__file__).resolve().parents[1]
     header_file = project_dir / 'arduino/engineering-team-motor/definitions.h'
@@ -548,6 +623,7 @@ if __name__ == "__main__":
     while True:
         if not motor.job_active:
             time.sleep(1)
+            motor.send_wake_motor()
             motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
                                                   rpm=random.random() * 300,
                                                   direction=random.choice([True, False]),
@@ -561,6 +637,13 @@ if __name__ == "__main__":
             #                            use_ramping=True,
             #                            ramping_steps=1000,
             #                            job_id = 1)
+
+            # motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
+            #                                   direction=random.choice([True, False]),
+            #                                   rpm=120.0,
+            #                                   use_ramping=False,
+            #                                   ramping_steps=250,
+            #                                   job_id=1)
 
         else:
             time.sleep(0.1)
