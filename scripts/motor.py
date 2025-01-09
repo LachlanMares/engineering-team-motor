@@ -6,6 +6,7 @@ import time
 import threading
 import serial
 import queue
+import random
 from typing import Union
 from pathlib import Path
 
@@ -74,6 +75,7 @@ class Motor:
         self.job_active = False
         self.job_pending = False
         self.job_response_code = -1
+        self.status_job_id = 0
         self.commanded_job = 0
         self.current_job_id = 0
         self.current_microstep = 0
@@ -256,7 +258,7 @@ class Motor:
                 pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
                 required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution) * best_step_choice
 
-                print(f"{pulse_interval=}, {required_pulses=}, {best_step_choice=}")
+                print(f"{pulse_interval=} uS, {required_pulses=}, {best_step_choice=}")
 
                 return self.send_motor_pulses(direction=direction,
                                               microstep=best_step_choice,
@@ -409,6 +411,8 @@ class Motor:
         wait_thread.start()
         wait_thread.join()
 
+        self.current_job_id = 0 if not self.job_active else job_id
+
         return self.job_active, self.job_response_code
 
     def wait_for_confirmation(self):
@@ -496,7 +500,7 @@ class Motor:
 
                 if new_message_dict["id"] == self.motor_status_message_id:
                     status_message = self.motor_status_message_struct.unpack(new_message_dict["msg"])
-                    self.current_job_id = status_message[1]
+                    self.status_job_id = status_message[1]
                     self.current_microstep = status_message[2]
                     self.current_job_pulses_remaining = status_message[3]
 
@@ -542,26 +546,21 @@ if __name__ == "__main__":
     motor.send_wake_motor()
 
     while True:
-        motor.send_motor_rotations(number_or_rotations=50,
-                                   direction=True,
-                                   microstep=1,
-                                   pulse_interval=1000,
-                                   pulse_on_period=500,
-                                   use_ramping=True,
-                                   ramping_steps=1000,
-                                   job_id = 1)
+        if not motor.job_active:
+            time.sleep(1)
+            motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
+                                                  rpm=random.random() * 300,
+                                                  direction=random.choice([True, False]),
+                                                  job_id=1)
 
+            # motor.send_motor_rotations(number_or_rotations=50,
+            #                            direction=True,
+            #                            microstep=1,
+            #                            pulse_interval=1000,
+            #                            pulse_on_period=500,
+            #                            use_ramping=True,
+            #                            ramping_steps=1000,
+            #                            job_id = 1)
 
-        # motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
-        #                                       rpm=10.0,
-        #                                       direction=False,
-        #                                       job_id=1)
-
-        # motor.send_motor_pulses(direction=True,
-        #                         microstep=1,
-        #                         pulses=100000,
-        #                         pulse_interval=1500,
-        #                         pulse_on_period=500,
-        #                         job_id=1)
-
-        time.sleep(5)
+        else:
+            time.sleep(0.1)
