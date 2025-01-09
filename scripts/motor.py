@@ -55,6 +55,7 @@ class Motor:
         # message_types
         self.motor_status_message_id = definitions['message_types']['MOTOR_STATUS_MESSAGE_ID']
         self.motor_feedback_message_id = definitions['message_types']['MOTOR_FEEDBACK_MESSAGE_ID']
+        self.motor_in_fault_message_id = definitions['message_types']['MOTOR_FAULT_MESSAGE_ID']
         self.response_message_id = definitions['message_types']['RESPONSE_MESSAGE_ID']
         self.job_complete_message_id = definitions['message_types']['JOB_COMPLETE_MESSAGE_ID']
         self.job_cancelled_message_id = definitions['message_types']['JOB_CANCELLED_MESSAGE_ID']
@@ -82,17 +83,17 @@ class Motor:
         self.current_motor_encoder_count = 0
 
         # Incoming messages don't include header or footer bytes
-        self.motor_status_message_struct = struct.Struct('<4BLB')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining}
-        self.motor_feedback_message_struct = struct.Struct('<B2fhB')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder_status.velocity_radians, motor.encoder.angle_radians, motor.encoder_status.angle_count}
-        self.response_message_struct = struct.Struct('<5B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK]};
-        self.job_complete_message_struct = struct.Struct('<3B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id}
-        self.job_cancelled_message_struct = struct.Struct('<3B')  # {JOB_CANCELLED_MESSAGE_ID, motor_ptr.status_variables.job_id};
+        self.motor_status_message_struct = struct.Struct('<4BLB')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining, ETX}
+        self.motor_feedback_message_struct = struct.Struct('<B2fhB')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder_status.velocity_radians, motor.encoder.angle_radians, motor.encoder_status.angle_count, ETX}
+        self.motor_in_fault_message_struct = struct.Struct('<2B')  # {MOTOR_FAULT_MESSAGE_ID, ETX};
+        self.response_message_struct = struct.Struct('<5B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK], ETX};
+        self.job_complete_message_struct = struct.Struct('<3B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id, ETX}
+        self.job_cancelled_message_struct = struct.Struct('<3B')  # {JOB_CANCELLED_MESSAGE_ID, motor_ptr.status_variables.job_id, ETX};
 
         self.send_queue = queue.Queue(maxsize=20)
         self.receive_queue = queue.Queue(maxsize=20)
         self.read_thread = None
         self.updating_thread = None
-        self.read_lock = threading.Lock()
         self.job_feedback_event = threading.Event()
         self.running = False      
         self.ser = None
@@ -499,6 +500,10 @@ class Motor:
                     self.current_microstep = status_message[2]
                     self.current_job_pulses_remaining = status_message[3]
 
+                elif new_message_dict["id"] == self.motor_in_fault_message_id:
+                    fault_message = self.motor_in_fault_message_struct.unpack(new_message_dict["msg"])
+                    print(f"Motor Fault")
+
                 elif new_message_dict["id"] == self.response_message_id:
                     response_message = self.response_message_struct.unpack(new_message_dict["msg"])
 
@@ -537,20 +542,20 @@ if __name__ == "__main__":
     motor.send_wake_motor()
 
     while True:
-        # motor.send_motor_rotations(number_or_rotations=5,
-        #                            direction=True,
-        #                            microstep = 4,
-        #                            pulse_interval = 1000,
-        #                            pulse_on_period = 500,
-        #                            use_ramping = False,
-        #                            job_id = 1)
+        motor.send_motor_rotations(number_or_rotations=50,
+                                   direction=True,
+                                   microstep=1,
+                                   pulse_interval=1000,
+                                   pulse_on_period=500,
+                                   use_ramping=True,
+                                   ramping_steps=1000,
+                                   job_id = 1)
 
 
-        motor.send_motor_rotations_at_set_rpm(number_or_rotations=3,
-                                              rpm=80.0,
-                                              direction=False,
-                                              use_ramping=False,
-                                              job_id=1)
+        # motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
+        #                                       rpm=10.0,
+        #                                       direction=False,
+        #                                       job_id=1)
 
         # motor.send_motor_pulses(direction=True,
         #                         microstep=1,

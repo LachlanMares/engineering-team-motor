@@ -20,12 +20,14 @@
 #define DEFAULT_RAMP_STEPS                  50
 #define MINIMUM_PULSE_INTERVAL              500
 #define MAXIMUM_PULSE_INTERVAL              1000000
+#define DEFAULT_RAMP_SCALER                 4
 
 struct motor_command_struct {
   bool direction;
   bool use_ramping;
   uint8_t microstep;
   uint8_t job_id;
+  int ramp_scaler;
   unsigned long ramping_steps;
   unsigned long pulse_interval;
   unsigned long pulses;
@@ -42,6 +44,7 @@ struct motor_status_struct {
   bool use_ramping;
   uint8_t microstep;
   uint8_t job_id;
+  int ramp_scaler;
   unsigned long ramp_up_stop;
   unsigned long ramp_down_start;
   unsigned long ramp_up_interval;
@@ -53,18 +56,12 @@ struct motor_status_struct {
   unsigned long pulses_remaining;
 };
 
-struct encoder_status_struct {
-  bool direction;
-  int angle_count;
-  float velocity_radians;
-  float angle_radians;
-  long count;
-};
 
 class MotorInterface : public QuadratureEncoder {
   public:
     MotorInterface(unsigned long update_period_us, int ppr, bool filter);
     void Init(int direction_pin, int step_pin, int sleep_pin, int reset_pin, int fault_pin, int m0_pin, int m1_pin, int m2_pin, int enable_pin);
+    void ClearCommandVariables();
     void Enable();
     void Disable();
     void Wake();
@@ -76,13 +73,11 @@ class MotorInterface : public QuadratureEncoder {
     void ResumeJob();
     void CancelJob();
     void ResetJobId();
-    bool FaultCheck();
     void UpdateStatus();
     bool Update(unsigned long);
 
     motor_command_struct command_variables;
     motor_status_struct status_variables;
-    encoder_status_struct encoder;
     uint8_t status_byte;
 
   private:

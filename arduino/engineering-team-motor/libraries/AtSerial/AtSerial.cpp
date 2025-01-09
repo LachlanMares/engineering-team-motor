@@ -7,6 +7,7 @@ AtSerial::AtSerial() {
 
 void AtSerial::setInitial(long baudrate, int timeout) {
     Serial.begin(baudrate);
+
     if(timeout > 0) {
         Serial.setTimeout(timeout);
     }
@@ -17,7 +18,7 @@ int AtSerial::update(unsigned char* ext_buffer) {
     int data_length = 0;
     unsigned int bytes_read = 0;
 
-    for(int i=0; i<10; i++) {
+    for(int i=0; i<2; i++) {
 
         if(Serial.available() > HEADER_LENGTH) {
             unsigned char in_byte = Serial.read();
@@ -53,7 +54,9 @@ void AtSerial::sendMessage(unsigned char* buffer_start, int msg_length) {
     packet[0] = STX;
     packet[1] = (unsigned char) msg_length + 3;
     packet[msg_length+2] = ETX;
+
     memcpy(&packet[2], buffer_start, msg_length);
+
     Serial.write(packet, msg_length + 3);
 }
 

@@ -23,20 +23,7 @@ MotorInterface::MotorInterface(unsigned long update_period_us, int ppr, bool fil
     status_variables.ramp_down_interval = DEFAULT_PULSE_INTERVAL;
     status_variables.ramp_interval_step = 0;
 
-    command_variables.direction = false;
-    command_variables.use_ramping = false;
-    command_variables.microstep = 1;
-    command_variables.job_id = 0;
-    command_variables.ramping_steps = 0;
-    command_variables.pulses = 0;
-    command_variables.pulse_interval = DEFAULT_PULSE_INTERVAL;
-    command_variables.pulse_on_period = DEFAULT_PULSE_ON_PERIOD;
-
-    encoder.direction = false;
-    encoder.angle_count = 0;
-    encoder.velocity_radians = 0.0;
-    encoder.angle_radians = 0.0;
-    encoder.count = 0;
+    ClearCommandVariables();
 }
 
 void MotorInterface::Init(int direction_pin, int step_pin, int sleep_pin, int reset_pin, int fault_pin, int m0_pin, int m1_pin, int m2_pin, int enable_pin) {
@@ -70,24 +57,44 @@ void MotorInterface::Init(int direction_pin, int step_pin, int sleep_pin, int re
     digitalWrite(_enable_pin, LOW);
 } 
 
+void MotorInterface::ClearCommandVariables() {
+    command_variables.direction = false;
+    command_variables.use_ramping = false;
+    command_variables.microstep = 1;
+    command_variables.job_id = 0;
+    command_variables.ramp_scaler = DEFAULT_RAMP_SCALER;
+    command_variables.ramping_steps = 0;
+    command_variables.pulses = 0;
+    command_variables.pulse_interval = DEFAULT_PULSE_INTERVAL;
+    command_variables.pulse_on_period = DEFAULT_PULSE_ON_PERIOD;
+}
+
 void MotorInterface::Enable() {
-    status_variables.enabled = true;
-    digitalWrite(_enable_pin, LOW);
+    if (!status_variables.enabled) {
+        status_variables.enabled = true;
+        digitalWrite(_enable_pin, LOW);
+    }
 }
 
 void MotorInterface::Disable() {
-    status_variables.enabled = false;
-    digitalWrite(_enable_pin, HIGH);
+    if (status_variables.enabled) {
+        status_variables.enabled = false;
+        digitalWrite(_enable_pin, HIGH);
+    }
 }
 
 void MotorInterface::Wake() {
-    status_variables.sleep = false;
-    digitalWrite(_sleep_pin, HIGH);
+    if (status_variables.sleep) {
+        status_variables.sleep = false;
+        digitalWrite(_sleep_pin, HIGH);
+    }
 }
 
 void MotorInterface::Sleep() {
-    status_variables.sleep = true;
-    digitalWrite(_sleep_pin, LOW);
+    if (!status_variables.sleep) {
+        status_variables.sleep = true;
+        digitalWrite(_sleep_pin, LOW);
+    }
 }
 
 void MotorInterface::Reset() {
@@ -96,8 +103,9 @@ void MotorInterface::Reset() {
     digitalWrite(_reset_pin, HIGH);
 }
 
-boolean MotorInterface::FaultStatus() {
-    return false; // !digitalRead(_fault_pin);
+bool MotorInterface::FaultStatus() {
+    status_variables.fault = false; // !digitalRead(_fault_pin);  # TODO sort this out
+    return status_variables.fault;
 }
 
 void MotorInterface::DecodeMicroStep() {
@@ -149,29 +157,28 @@ void MotorInterface::DecodeMicroStep() {
 }
 
 void MotorInterface::StartJob() {
-    // status_variables.fault = FaultStatus();
 
-    if(status_variables.fault) {
+    if(FaultStatus()) {
         status_variables.running = false;
         Sleep();
         Disable();
         Reset();
 
     } else {
-        Enable();
-        Wake();
-
         status_variables.running = true;
         status_variables.direction = command_variables.direction;
         status_variables.use_ramping = command_variables.use_ramping;
         status_variables.microstep = command_variables.microstep;
         status_variables.job_id = command_variables.job_id;
         status_variables.paused = false;
+        status_variables.ramp_scaler = (command_variables.ramp_scaler == 0) ? DEFAULT_RAMP_SCALER : command_variables.ramp_scaler;
 
         _output_state = false;
         _last_pulse_on_micros = 0;
         _last_pulse_off_micros = 0;
 
+        Enable();
+        Wake();
         digitalWrite(_direction_pin, status_variables.direction ? HIGH : LOW);
         digitalWrite(_step_pin, LOW);
         DecodeMicroStep();
@@ -191,11 +198,12 @@ void MotorInterface::StartJob() {
                 status_variables.ramp_down_start = command_variables.ramping_steps;
 
             } else {
+                // Set ramp up/down to half the number of total steps
                 status_variables.ramp_up_stop = (long)(status_variables.pulses_remaining / 2);
                 status_variables.ramp_down_start = status_variables.ramp_up_stop - 1;
             }
 
-            status_variables.ramp_up_interval = status_variables.pulse_interval * 3;
+            status_variables.ramp_up_interval = status_variables.pulse_interval * command_variables.ramp_scaler;
             status_variables.ramp_pulse_interval = status_variables.ramp_up_interval;
             status_variables.ramp_down_interval = status_variables.pulse_interval;
             status_variables.ramp_interval_step = (long)((status_variables.ramp_up_interval - status_variables.ramp_down_interval) / command_variables.ramping_steps);
@@ -209,6 +217,8 @@ void MotorInterface::StartJob() {
             status_variables.ramp_pulse_interval = 0;
         }
     }
+
+    ClearCommandVariables();
 }
 
 void MotorInterface::PauseJob() {
@@ -235,15 +245,7 @@ void MotorInterface::ResetJobId() {
 }
 
 bool MotorInterface::Update(unsigned long micros_now) {
-    if (updateEncoderVelocity(micros_now)) {
-        /*
-        encoder.direction = getEncoderDirection();
-        encoder.count = getEncoderCount();
-        encoder.angle_count = getEncoderAngleCount();
-        encoder.angle_radians = getEncoderAngleRadians();
-        encoder.velocity_radians = getEncoderVelocityRadians();
-        */
-    }
+    updateEncoderVelocity(micros_now);
 
     bool job_done = false;
 
@@ -258,7 +260,7 @@ bool MotorInterface::Update(unsigned long micros_now) {
 
                         if(abs(micros_now - _last_pulse_on_micros) >= status_variables.ramp_pulse_interval) {
 
-                            _last_pulse_on_micros += status_variables.pulse_interval;
+                            _last_pulse_on_micros = micros_now;
                             _last_pulse_off_micros = micros_now;
                             _output_state = true;
                             digitalWrite(_step_pin, HIGH);
@@ -310,11 +312,6 @@ bool MotorInterface::Update(unsigned long micros_now) {
     }
 
     return job_done;
-}
-
-bool MotorInterface::FaultCheck() {
-    status_variables.fault = FaultStatus();
-    return status_variables.fault;
 }
 
 void MotorInterface::UpdateStatus() {

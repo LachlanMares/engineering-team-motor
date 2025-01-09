@@ -50,6 +50,7 @@
 // message_types
 #define MOTOR_STATUS_MESSAGE_ID             0xFF
 #define MOTOR_FEEDBACK_MESSAGE_ID           0xFE
+#define MOTOR_FAULT_MESSAGE_ID              0xFD
 #define RESPONSE_MESSAGE_ID                 0xFC
 #define JOB_COMPLETE_MESSAGE_ID             0xFA
 #define JOB_CANCELLED_MESSAGE_ID            0xF9
@@ -57,6 +58,7 @@
 // message_lengths
 #define MOTOR_STATUS_MESSAGE_LENGTH         8
 #define MOTOR_FEEDBACK_MESSAGE_LENGTH       11
+#define MOTOR_FAULT_MESSAGE_LENGTH          1
 #define RESPONSE_MESSAGE_LENGTH             4
 #define JOB_COMPLETE_MESSAGE_LENGTH         2
 #define JOB_CANCELLED_MESSAGE_LENGTH        2
