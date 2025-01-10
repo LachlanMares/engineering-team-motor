@@ -82,20 +82,23 @@ class Motor:
         self.job_pending = False
         self.job_response_code = -1
         self.status_job_id = 0
-        self.commanded_job = 0
+        self.commanded_job_type = 0
+        self.requested_job = 0
         self.current_job_id = 0
         self.current_microstep = 0
         self.current_job_pulses_remaining = 0
+        self.at_commanded_position = True
+        self.commanded_position = 0.0
+        self.commanded_speed = 10.0
         self.current_motor_velocity = 0.0
         self.current_motor_position = 0.0
         self.current_motor_encoder_count = 0
-
 
         # Incoming messages don't include header or footer bytes
         self.motor_status_message_struct = struct.Struct('<4BLB')  # {MOTOR_STATUS_MESSAGE_ID, motor.status_byte, motor.status_variables.job_id, motor.status_variables.microstep, motor.status_variables.pulses_remaining, ETX}
         self.motor_feedback_message_struct = struct.Struct('<B2fhB')  # {MOTOR_FEEDBACK_MESSAGE_ID, motor.encoder_status.velocity_radians, motor.encoder.angle_radians, motor.encoder_status.angle_count, ETX}
         self.motor_in_fault_message_struct = struct.Struct('<2B')  # {MOTOR_FAULT_MESSAGE_ID, ETX};
-        self.response_message_struct = struct.Struct('<5B')  # {RESPONSE_MESSAGE_ID, COMMAND, RESPONSE, [ACK or NAK], ETX};
+        self.response_message_struct = struct.Struct('<6B')  # {RESPONSE_MESSAGE_ID, COMMAND, JOB_ID, RESPONSE, [ACK or NAK], ETX};
         self.job_complete_message_struct = struct.Struct('<3B')  # {JOB_COMPLETE_MESSAGE_ID, motor.status_variables.job_id, ETX}
         self.job_cancelled_message_struct = struct.Struct('<3B')  # {JOB_CANCELLED_MESSAGE_ID, motor_ptr.status_variables.job_id, ETX};
 
@@ -104,8 +107,7 @@ class Motor:
         self.read_thread = None
         self.updating_thread = None
         self.read_lock = threading.Lock()
-        self.job_feedback_event = threading.Event()
-        self.running = False      
+        self.running = False
         self.ser = None
         self.connected = False
 
@@ -268,7 +270,7 @@ class Motor:
                 pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
                 required_pulses = int(abs(number_or_rotations) * self.motor_pulses_per_revolution) * best_step_choice
 
-                print(f"{pulse_interval=} uS, {required_pulses=}, {best_step_choice=}")
+                # print(f"{pulse_interval=} uS, {required_pulses=}, {best_step_choice=}")
 
                 return self.send_motor_pulses(direction=direction,
                                               microstep=best_step_choice,
@@ -351,6 +353,7 @@ class Motor:
                                     use_ramping: bool = False,
                                     ramping_steps: int = 0,
                                     job_id: int = 0,
+                                    is_adjustment: bool = False,
                                     ):
 
         if rpm < 0:
@@ -361,45 +364,59 @@ class Motor:
             pulse_interval = self.minimum_pulse_interval_us
 
         else:
-            best_step_choice = 1
+            best_step_choice  = 1
             for (m_step, max_rpms) in zip(self.microsteps, self.max_motor_rpm_list):
                 if rpm < max_rpms:
                     best_step_choice = m_step
 
             pulse_interval = int((1 / ((rpm / 60) * self.motor_pulses_per_revolution * best_step_choice)) * 1e6)
 
-        with self.read_lock:
-            current_motor_encoder_count = deepcopy(self.current_motor_encoder_count)
+        current_motor_position = self.get_rotor_position()
 
-        desired_motor_encoder_count = desired_position / self.radians_per_encoder_pulse
+        if not self.motor_is_at_target(desired_position):
+            self.at_commanded_position = False
+            self.commanded_speed = rpm
+            self.commanded_position = desired_position
 
-        if direction:
-            if desired_motor_encoder_count >= current_motor_encoder_count:
-                delta_count = desired_motor_encoder_count - current_motor_encoder_count
+            if not is_adjustment:
+                if direction:
+                    if desired_position >= current_motor_position:
+                        delta_position = desired_position - current_motor_position
+                    else:
+                        delta_position = self.two_pi - (current_motor_position - desired_position)
+                else:
+                    if desired_position <= current_motor_position:
+                        delta_position = current_motor_position - desired_position
+                    else:
+                        delta_position = self.two_pi - (desired_position - current_motor_position)
+
             else:
-                delta_count = self.encoder_pulses_per_revolution - (current_motor_encoder_count - desired_motor_encoder_count)
-        else:
-            if desired_motor_encoder_count <= current_motor_encoder_count:
-                delta_count = current_motor_encoder_count - desired_motor_encoder_count
+                delta_position = abs(desired_position - current_motor_position)
+                direction = desired_position >= current_motor_position
+
+            number_or_rotations = delta_position / self.two_pi
+            required_pulses = int(number_or_rotations * self.motor_pulses_per_revolution) * best_step_choice
+
+            # print(f"{self.get_rotor_position():.3f}, {self.commanded_position=}, {delta_position=}, {required_pulses=}, {best_step_choice=}")
+
+            if required_pulses > 0:
+                self.send_motor_pulses(direction=direction,
+                                       microstep=best_step_choice,
+                                       pulses=required_pulses,
+                                       pulse_interval=pulse_interval,
+                                       pulse_on_period=self.default_pulse_on_period,
+                                       use_ramping=use_ramping,
+                                       ramping_steps=ramping_steps,
+                                       job_id=job_id,
+                                       )
             else:
-                delta_count = self.encoder_pulses_per_revolution - (desired_motor_encoder_count - current_motor_encoder_count)
+                print(f"Job with zero pulses requested")
+                self.job_active = False
+                return -1
 
-        number_or_rotations = delta_count / self.encoder_pulses_per_revolution
-        required_pulses = int(number_or_rotations * self.motor_pulses_per_revolution) * best_step_choice
-
-        if required_pulses > 10:
-
-            self.send_motor_pulses(direction=direction,
-                                   microstep=best_step_choice,
-                                   pulses=required_pulses,
-                                   pulse_interval=pulse_interval,
-                                   pulse_on_period=self.default_pulse_on_period,
-                                   use_ramping=use_ramping,
-                                   ramping_steps=ramping_steps,
-                                   job_id=job_id,
-                                   )
         else:
-            print(f"Rotor already at correct position {self.get_rotor_position():.3f}")
+            print(f"Rotor already at correct position")
+            self.job_active = False
             return -1
 
     def send_motor_pulses(self,
@@ -470,31 +487,10 @@ class Motor:
                                                 self.ETX
                                                 ))
 
-        self.job_feedback_event.clear()
         self.job_active = False
         self.job_pending = True
-        self.commanded_job = command
-
-        wait_thread = threading.Thread(target=self.wait_for_confirmation)
-        wait_thread.start()
-        wait_thread.join()
-
-        self.current_job_id = 0 if not self.job_active else job_id
-
-        return self.job_active, self.job_response_code
-
-    def wait_for_confirmation(self):
-        start_time = time.time()
-
-        while not self.job_feedback_event.is_set():
-            time.sleep(0.01)
-            if time.time() - start_time > 2.0:
-                self.job_active = False
-                self.job_pending = False
-                self.job_response_code = -1
-
-                print(f"Job confirmation failure")
-                return -1
+        self.requested_job = job_id
+        self.commanded_job_type = command
 
     def get_rotor_position(self):
         with self.read_lock:
@@ -566,6 +562,11 @@ class Motor:
                                         self.ETX
                                         ))
 
+    def motor_is_at_target(self, desired_position):
+        current_motor_position = self.get_rotor_position()
+
+        return abs(current_motor_position - desired_position) < 10 * self.radians_per_encoder_pulse
+
     def processing_loop(self):
         while self.running:
             try:
@@ -584,18 +585,42 @@ class Motor:
                 elif new_message_dict["id"] == self.response_message_id:
                     response_message = self.response_message_struct.unpack(new_message_dict["msg"])
 
-                    if response_message[1] == self.commanded_job:
-                        self.job_active = response_message[3] == self.ACK
-                        self.job_pending = False
-                        self.job_response_code = response_message[2]
-                        self.job_feedback_event.set()
+                    if response_message[1] == self.commanded_job_type:
+                        self.commanded_job_type = 0
+
+                        if response_message[2] == self.requested_job and response_message[4] == self.ACK:
+                            self.current_job_id = self.requested_job
+                            self.job_active = True
+                            self.job_pending = False
+
+                        else:
+                            self.current_job_id = 0
+                            self.requested_job = 0
+                            self.job_active = False
+                            self.job_pending = False
 
                 elif new_message_dict["id"] == self.job_complete_message_id:
                     job_complete_message = self.job_complete_message_struct.unpack(new_message_dict["msg"])
 
                     if job_complete_message[1] == self.current_job_id:
-                        self.job_active = False
-                        self.send_sleep_motor()
+
+                        if not self.at_commanded_position:
+                            if self.motor_is_at_target(self.commanded_position):
+                                self.at_commanded_position = True
+                                self.job_active = False
+                                self.send_sleep_motor()
+
+                            else:
+                                self.current_job_id = 1
+                                self.goto_rotor_position_radians(desired_position=self.commanded_position,
+                                                                 direction=True,
+                                                                 rpm=self.commanded_speed,
+                                                                 job_id=self.current_job_id,
+                                                                 is_adjustment=True)
+                        else:
+                            self.at_commanded_position = True
+                            self.job_active = False
+                            self.send_sleep_motor()
 
                 elif new_message_dict["id"] == self.job_cancelled_message_id:
                     job_cancelled_message = self.job_cancelled_message_struct.unpack(new_message_dict["msg"])
@@ -609,7 +634,8 @@ class Motor:
             except Exception as e:
                 print(f'Exception {e}')
 
-
+    def is_ready_for_job(self):
+        return not self.job_active and not self.job_pending
 
 if __name__ == "__main__":
     project_dir = Path(__file__).resolve().parents[1]
@@ -621,13 +647,13 @@ if __name__ == "__main__":
     motor.send_wake_motor()
 
     while True:
-        if not motor.job_active:
+        if motor.is_ready_for_job():
             time.sleep(1)
             motor.send_wake_motor()
-            motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
-                                                  rpm=random.random() * 300,
-                                                  direction=random.choice([True, False]),
-                                                  job_id=1)
+            # motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
+            #                                       rpm=random.random() * 300,
+            #                                       direction=random.choice([True, False]),
+            #                                       job_id=1)
 
             # motor.send_motor_rotations(number_or_rotations=50,
             #                            direction=True,
@@ -637,13 +663,13 @@ if __name__ == "__main__":
             #                            use_ramping=True,
             #                            ramping_steps=1000,
             #                            job_id = 1)
-
-            # motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
-            #                                   direction=random.choice([True, False]),
-            #                                   rpm=120.0,
-            #                                   use_ramping=False,
-            #                                   ramping_steps=250,
-            #                                   job_id=1)
+            #
+            motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
+                                              direction=random.choice([True, False]),
+                                              rpm=50.0,
+                                              use_ramping=False,
+                                              ramping_steps=250,
+                                              job_id=1)
 
         else:
             time.sleep(0.1)
