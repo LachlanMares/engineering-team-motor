@@ -14,6 +14,7 @@
 // encoder_settings
 #define ENCODER_UPDATE_PERIOD_US  25000
 #define ENCODER_PULSES_PER_REVOLUTION  2400
+#define ENCODER_SETPOINT_TOLERANCE  10
 
 // schedule_settings
 #define FAULT_CHECK_TASK_ID  0

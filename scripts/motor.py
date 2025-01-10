@@ -47,17 +47,18 @@ class Motor:
         # encoder_settings
         self.encoder_update_period_us = definitions['encoder_settings']['ENCODER_UPDATE_PERIOD_US']
         self.encoder_pulses_per_revolution = definitions['encoder_settings']['ENCODER_PULSES_PER_REVOLUTION']
+        self.encoder_setpoint_tolerance = definitions['encoder_settings']['ENCODER_SETPOINT_TOLERANCE']
         self.radians_per_encoder_pulse = self.two_pi / self.encoder_pulses_per_revolution
 
         # status_message_bits
-        self.status_direction_bit = definitions['status_message_bits']['STATUS_DIRECTION_BIT']
-        self.status_fault_bit = definitions['status_message_bits']['STATUS_FAULT_BIT']
-        self.status_paused_bit = definitions['status_message_bits']['STATUS_PAUSED_BIT']
-        self.status_ramping_bit = definitions['status_message_bits']['STATUS_RAMPING_BIT']
-        # self.status_spare_bit = definitions['status_message_bits']['STATUS_SPARE_BIT']
-        self.status_enabled_bit = definitions['status_message_bits']['STATUS_ENABLED_BIT']
-        self.status_running_bit = definitions['status_message_bits']['STATUS_RUNNING_BIT']
-        self.status_sleep_bit = definitions['status_message_bits']['STATUS_SLEEP_BIT']
+        self.status_direction_bit = 1 << definitions['status_message_bits']['STATUS_DIRECTION_BIT']
+        self.status_fault_bit = 1 << definitions['status_message_bits']['STATUS_FAULT_BIT']
+        self.status_paused_bit = 1 << definitions['status_message_bits']['STATUS_PAUSED_BIT']
+        self.status_ramping_bit = 1 << definitions['status_message_bits']['STATUS_RAMPING_BIT']
+        # self.status_spare_bit = 1 << definitions['status_message_bits']['STATUS_SPARE_BIT']
+        self.status_enabled_bit = 1 << definitions['status_message_bits']['STATUS_ENABLED_BIT']
+        self.status_running_bit = 1 << definitions['status_message_bits']['STATUS_RUNNING_BIT']
+        self.status_sleep_bit = 1 << definitions['status_message_bits']['STATUS_SLEEP_BIT']
 
         # message_types
         self.motor_status_message_id = definitions['message_types']['MOTOR_STATUS_MESSAGE_ID']
@@ -84,9 +85,18 @@ class Motor:
         self.status_job_id = 0
         self.commanded_job_type = 0
         self.requested_job = 0
-        self.current_job_id = 0
-        self.current_microstep = 0
-        self.current_job_pulses_remaining = 0
+        self.status_message_dict = {"job_id": 0,
+                                    "status": {
+                                        "direction" : True,
+                                        "fault": False,
+                                        "paused": False,
+                                        "using_ramping": False,
+                                        "enabled": False,
+                                        "running": False,
+                                        "sleeping": False
+                                    },
+                                    "microstep": 1,
+                                    "pulses_remaining": 0}
         self.at_commanded_position = True
         self.commanded_position = 0.0
         self.commanded_speed = 10.0
@@ -412,11 +422,13 @@ class Motor:
             else:
                 print(f"Job with zero pulses requested")
                 self.job_active = False
+                self.at_commanded_position = True
                 return -1
 
         else:
             print(f"Rotor already at correct position")
             self.job_active = False
+            self.at_commanded_position = True
             return -1
 
     def send_motor_pulses(self,
@@ -565,7 +577,22 @@ class Motor:
     def motor_is_at_target(self, desired_position):
         current_motor_position = self.get_rotor_position()
 
-        return abs(current_motor_position - desired_position) < 10 * self.radians_per_encoder_pulse
+        return abs(current_motor_position - desired_position) < self.encoder_setpoint_tolerance * self.radians_per_encoder_pulse
+
+    def process_status_message(self, status_message: Union[list, tuple]):
+        self.status_message_dict = {"job_id": status_message[2],
+                                    "status": {
+                                        "direction": (status_message[1] & self.status_direction_bit) > 0,
+                                        "fault": (status_message[1] & self.status_fault_bit) > 0,
+                                        "paused": (status_message[1] & self.status_paused_bit) > 0,
+                                        "using_ramping": (status_message[1] & self.status_ramping_bit) > 0,
+                                        "enabled": (status_message[1] & self.status_enabled_bit) > 0,
+                                        "running": (status_message[1] & self.status_running_bit) > 0,
+                                        "sleeping": (status_message[1] & self.status_sleep_bit) > 0,
+                                    },
+                                    "microstep": status_message[3],
+                                    "pulses_remaining": status_message[4]
+                                    }
 
     def processing_loop(self):
         while self.running:
@@ -573,10 +600,7 @@ class Motor:
                 new_message_dict = self.receive_queue.get(timeout=0.01)
 
                 if new_message_dict["id"] == self.motor_status_message_id:
-                    status_message = self.motor_status_message_struct.unpack(new_message_dict["msg"])
-                    self.status_job_id = status_message[1]
-                    self.current_microstep = status_message[2]
-                    self.current_job_pulses_remaining = status_message[3]
+                    self.process_status_message(status_message=self.motor_status_message_struct.unpack(new_message_dict["msg"]))
 
                 elif new_message_dict["id"] == self.motor_in_fault_message_id:
                     fault_message = self.motor_in_fault_message_struct.unpack(new_message_dict["msg"])
@@ -611,7 +635,6 @@ class Motor:
                                 self.send_sleep_motor()
 
                             else:
-                                self.current_job_id = 1
                                 self.goto_rotor_position_radians(desired_position=self.commanded_position,
                                                                  direction=True,
                                                                  rpm=self.commanded_speed,
@@ -666,10 +689,10 @@ if __name__ == "__main__":
             #
             motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
                                               direction=random.choice([True, False]),
-                                              rpm=50.0,
-                                              use_ramping=False,
-                                              ramping_steps=250,
+                                              rpm=20.0,
+                                              use_ramping=True,
                                               job_id=1)
 
         else:
-            time.sleep(0.1)
+            time.sleep(0.5)
+            print(motor.status_message_dict)
