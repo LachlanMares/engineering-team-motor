@@ -747,7 +747,7 @@ if __name__ == "__main__":
 
             else:
                 time.sleep(0.5)
-                print(motor.get_rotor_position())
+                print(f"{motor.get_rotor_position()=:.3f} radians")
                 print(motor.status_message_dict)
 
     except KeyboardInterrupt:
