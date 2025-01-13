@@ -154,6 +154,7 @@ class Motor:
 
     def stop(self):
         print("\nShutting down motor...")
+        self.send_cancel_job()
         self.send_sleep_motor()
         self.send_disable_motor()
         time.sleep(0.5)
@@ -722,23 +723,23 @@ if __name__ == "__main__":
                 time.sleep(1)
                 motor.send_wake_motor()
                 motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
-                                                      rpm=random.random() * 300,
+                                                      rpm=random.random() * 10,
                                                       direction=random.choice([True, False]),
                                                       job_id=1)
 
-                # motor.send_motor_rotations(number_or_rotations=10,
+                # motor.send_motor_rotations(number_or_rotations=2,
                 #                            direction=random.choice([True, False]),
-                #                            microstep=1,
-                #                            pulse_interval=1000,
+                #                            microstep=32,
+                #                            pulse_interval=20000,
                 #                            pulse_on_period=500,
                 #                            use_ramping=True,
                 #                            ramping_steps=250,
                 #                            ramp_scaler=3,
                 #                            job_id=1)
                 #
-                # motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
+                # motor.goto_rotor_position_radians(desired_position=random.choice([math.pi/2, math.pi, 1.5*math.pi]),
                 #                                   direction=random.choice([True, False]),
-                #                                   rpm=60.0,
+                #                                   rpm=10.0,
                 #                                   use_ramping=True,
                 #                                   ramping_steps=100,
                 #                                   ramp_scaler=5,
@@ -746,6 +747,7 @@ if __name__ == "__main__":
 
             else:
                 time.sleep(0.5)
+                print(motor.get_rotor_position())
                 print(motor.status_message_dict)
 
     except KeyboardInterrupt:
