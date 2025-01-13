@@ -25,7 +25,7 @@ from copy import deepcopy
 
 warnings.filterwarnings("ignore")
 
-from scripts import parse_definitions_file
+from definition_file_parser import parse_definitions_file
 
 
 class Motor:
@@ -153,10 +153,17 @@ class Motor:
 
 
     def stop(self):
+        print("\nShutting down motor...")
+        self.send_sleep_motor()
+        self.send_disable_motor()
+        time.sleep(0.5)
+
         self.running = False
         self.read_thread.join()
         self.updating_thread.join()
         self.ser.close()
+
+        print("Complete")
 
     def connect_serial_port(self):
         """
@@ -647,7 +654,7 @@ class Motor:
 
                 elif new_message_dict["id"] == self.response_message_id:
                     response_message = self.response_message_struct.unpack(new_message_dict["msg"])
-                    print(f"{response_message=}")
+                    # print(f"{response_message=}")
                     if response_message[1] == self.commanded_job_type:
                         self.commanded_job_type = 0
 
@@ -709,33 +716,38 @@ if __name__ == "__main__":
     motor.send_enable_motor()
     motor.send_wake_motor()
 
-    while True:
-        if motor.is_ready_for_job():
-            time.sleep(1)
-            motor.send_wake_motor()
-            # motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
-            #                                       rpm=random.random() * 300,
-            #                                       direction=random.choice([True, False]),
-            #                                       job_id=1)
+    try:
+        while True:
+            if motor.is_ready_for_job():
+                time.sleep(1)
+                motor.send_wake_motor()
+                motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
+                                                      rpm=random.random() * 300,
+                                                      direction=random.choice([True, False]),
+                                                      job_id=1)
 
-            motor.send_motor_rotations(number_or_rotations=10,
-                                       direction=random.choice([True, False]),
-                                       microstep=1,
-                                       pulse_interval=1000,
-                                       pulse_on_period=500,
-                                       use_ramping=True,
-                                       ramping_steps=250,
-                                       ramp_scaler=3,
-                                       job_id=1)
-            #
-            # motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
-            #                                   direction=random.choice([True, False]),
-            #                                   rpm=60.0,
-            #                                   use_ramping=True,
-            #                                   ramping_steps=100,
-            #                                   ramp_scaler=5,
-            #                                   job_id=1)
+                # motor.send_motor_rotations(number_or_rotations=10,
+                #                            direction=random.choice([True, False]),
+                #                            microstep=1,
+                #                            pulse_interval=1000,
+                #                            pulse_on_period=500,
+                #                            use_ramping=True,
+                #                            ramping_steps=250,
+                #                            ramp_scaler=3,
+                #                            job_id=1)
+                #
+                # motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
+                #                                   direction=random.choice([True, False]),
+                #                                   rpm=60.0,
+                #                                   use_ramping=True,
+                #                                   ramping_steps=100,
+                #                                   ramp_scaler=5,
+                #                                   job_id=1)
 
-        else:
-            time.sleep(0.5)
-            print(motor.status_message_dict)
+            else:
+                time.sleep(0.5)
+                print(motor.status_message_dict)
+
+    except KeyboardInterrupt:
+        motor.stop()
+
