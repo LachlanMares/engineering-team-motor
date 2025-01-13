@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 
+"""
+Author:
+    Lachlan Mares, lachlan.mares@adelaide.edu.au
+
+License:
+    ??
+
+Description:
+    ??
+"""
+
 import warnings
 import struct
 import math
@@ -85,6 +96,7 @@ class Motor:
         self.status_job_id = 0
         self.commanded_job_type = 0
         self.requested_job = 0
+        self.current_job_id = 0
         self.status_message_dict = {"job_id": 0,
                                     "status": {
                                         "direction" : True,
@@ -253,6 +265,7 @@ class Motor:
                                         direction: bool,
                                         use_ramping: bool = False,
                                         ramping_steps: int = 0,
+                                        ramp_scaler: Union[int, None] = None,
                                         job_id: int = 0,
                                         ):
 
@@ -268,6 +281,7 @@ class Motor:
                                               pulse_on_period=self.default_pulse_on_period,
                                               use_ramping=use_ramping,
                                               ramping_steps=ramping_steps,
+                                              ramp_scaler=ramp_scaler,
                                               job_id=job_id,
                                               )
 
@@ -289,6 +303,7 @@ class Motor:
                                               pulse_on_period=self.default_pulse_on_period,
                                               use_ramping=use_ramping,
                                               ramping_steps=ramping_steps,
+                                              ramp_scaler=ramp_scaler,
                                               job_id=job_id,
                                               )
 
@@ -298,6 +313,7 @@ class Motor:
                                      pulses: int = 0,
                                      use_ramping: bool = False,
                                      ramping_steps: int = 0,
+                                     ramp_scaler: Union[int, None] = None,
                                      job_id: int = 0,
                                      ):
 
@@ -311,6 +327,7 @@ class Motor:
                                           pulse_interval=self.minimum_pulse_interval_us,
                                           use_ramping=use_ramping,
                                           ramping_steps=ramping_steps,
+                                          ramp_scaler=ramp_scaler,
                                           job_id=job_id,
                                           )
 
@@ -329,6 +346,7 @@ class Motor:
                                           pulse_on_period=self.default_pulse_on_period,
                                           use_ramping=use_ramping,
                                           ramping_steps=ramping_steps,
+                                          ramp_scaler=ramp_scaler,
                                           job_id=job_id,
                                           )
 
@@ -340,6 +358,7 @@ class Motor:
                              pulse_on_period: Union[int, None] = None,
                              use_ramping: bool = False,
                              ramping_steps: int = 0,
+                             ramp_scaler: Union[int, None] = None,
                              job_id: int = 0,
                              ):
 
@@ -353,6 +372,7 @@ class Motor:
                                pulse_on_period=pulse_on_period,
                                use_ramping=use_ramping,
                                ramping_steps=ramping_steps,
+                               ramp_scaler=ramp_scaler,
                                job_id=job_id,
                                )
 
@@ -362,6 +382,7 @@ class Motor:
                                     rpm: Union[float, int],
                                     use_ramping: bool = False,
                                     ramping_steps: int = 0,
+                                    ramp_scaler: Union[int, None] = None,
                                     job_id: int = 0,
                                     is_adjustment: bool = False,
                                     ):
@@ -417,6 +438,7 @@ class Motor:
                                        pulse_on_period=self.default_pulse_on_period,
                                        use_ramping=use_ramping,
                                        ramping_steps=ramping_steps,
+                                       ramp_scaler=ramp_scaler,
                                        job_id=job_id,
                                        )
             else:
@@ -439,6 +461,7 @@ class Motor:
                           pulse_on_period: Union[int, None] = None,
                           use_ramping: bool = False,
                           ramping_steps: int = 0,
+                          ramp_scaler: Union[int, None] = None,
                           job_id: int = 0,
                           **kwargs):
 
@@ -484,20 +507,37 @@ class Motor:
                                                 self.ETX
                                                 ))
             else:
-                command = self.command_dict['SEND_JOB_ALL_VARIABLES_WITH_RAMPING']
-                self.send_queue.put(struct.pack('!6B4IB',
-                                                self.STX,
-                                                23,
-                                                command,
-                                                1 if direction else 0,
-                                                microstep if microstep in self.microsteps else 1,
-                                                job_id,
-                                                pulses,
-                                                pulse_interval if pulse_interval > self.minimum_pulse_interval_us else self.minimum_pulse_interval_us,
-                                                pulse_on_period,
-                                                ramping_steps,
-                                                self.ETX
-                                                ))
+                if ramp_scaler is None:
+                    command = self.command_dict['SEND_JOB_ALL_VARIABLES_WITH_RAMPING']
+                    self.send_queue.put(struct.pack('!6B4IB',
+                                                    self.STX,
+                                                    23,
+                                                    command,
+                                                    1 if direction else 0,
+                                                    microstep if microstep in self.microsteps else 1,
+                                                    job_id,
+                                                    pulses,
+                                                    pulse_interval if pulse_interval > self.minimum_pulse_interval_us else self.minimum_pulse_interval_us,
+                                                    pulse_on_period,
+                                                    ramping_steps,
+                                                    self.ETX
+                                                    ))
+                else:
+                    command = self.command_dict['SEND_JOB_ALL_VARIABLES_WITH_RAMPING_AND_RATE']
+                    self.send_queue.put(struct.pack('!6B4I2B',
+                                                    self.STX,
+                                                    24,
+                                                    command,
+                                                    1 if direction else 0,
+                                                    microstep if microstep in self.microsteps else 1,
+                                                    job_id,
+                                                    pulses,
+                                                    pulse_interval if pulse_interval > self.minimum_pulse_interval_us else self.minimum_pulse_interval_us,
+                                                    pulse_on_period,
+                                                    ramping_steps,
+                                                    ramp_scaler,
+                                                    self.ETX
+                                                    ))
 
         self.job_active = False
         self.job_pending = True
@@ -532,7 +572,6 @@ class Motor:
                                         self.command_dict['CANCEL_JOB'],
                                         self.ETX
                                         ))
-
 
     def send_enable_motor(self):
         self.send_queue.put(struct.pack('<4B',
@@ -608,7 +647,7 @@ class Motor:
 
                 elif new_message_dict["id"] == self.response_message_id:
                     response_message = self.response_message_struct.unpack(new_message_dict["msg"])
-
+                    print(f"{response_message=}")
                     if response_message[1] == self.commanded_job_type:
                         self.commanded_job_type = 0
 
@@ -660,11 +699,12 @@ class Motor:
     def is_ready_for_job(self):
         return not self.job_active and not self.job_pending
 
+
 if __name__ == "__main__":
     project_dir = Path(__file__).resolve().parents[1]
     header_file = project_dir / 'arduino/engineering-team-motor/definitions.h'
 
-    motor = Motor(definitions_filepath=header_file, serial_port='/dev/ttyACM0')
+    motor = Motor(definitions_filepath=header_file, serial_port='/dev/arduino_rp2040')
     motor.start_threads()
     motor.send_enable_motor()
     motor.send_wake_motor()
@@ -678,20 +718,23 @@ if __name__ == "__main__":
             #                                       direction=random.choice([True, False]),
             #                                       job_id=1)
 
-            # motor.send_motor_rotations(number_or_rotations=50,
-            #                            direction=True,
-            #                            microstep=1,
-            #                            pulse_interval=1000,
-            #                            pulse_on_period=500,
-            #                            use_ramping=True,
-            #                            ramping_steps=1000,
-            #                            job_id = 1)
+            motor.send_motor_rotations(number_or_rotations=10,
+                                       direction=random.choice([True, False]),
+                                       microstep=1,
+                                       pulse_interval=1000,
+                                       pulse_on_period=500,
+                                       use_ramping=True,
+                                       ramping_steps=250,
+                                       ramp_scaler=3,
+                                       job_id=1)
             #
-            motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
-                                              direction=random.choice([True, False]),
-                                              rpm=20.0,
-                                              use_ramping=True,
-                                              job_id=1)
+            # motor.goto_rotor_position_radians(desired_position=random.choice([0.0, math.pi/2, math.pi, 1.5*math.pi]),
+            #                                   direction=random.choice([True, False]),
+            #                                   rpm=60.0,
+            #                                   use_ramping=True,
+            #                                   ramping_steps=100,
+            #                                   ramp_scaler=5,
+            #                                   job_id=1)
 
         else:
             time.sleep(0.5)

@@ -69,6 +69,7 @@
 #define SEND_JOB_WITH_RAMPING               0xEE
 #define SEND_JOB_ALL_VARIABLES              0xED
 #define SEND_JOB_ALL_VARIABLES_WITH_RAMPING 0xEC
+#define SEND_JOB_ALL_VARIABLES_WITH_RAMPING_AND_RATE 0xE3
 #define PAUSE_JOB                           0xEB
 #define RESUME_JOB                          0xEA
 #define CANCEL_JOB                          0xE9

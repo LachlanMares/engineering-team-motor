@@ -3,6 +3,17 @@
 
 #include "Arduino.h"
 
+/*
+Author:
+    Lachlan Mares, lachlan.mares@adelaide.edu.au
+
+License:
+    ??    
+
+Description:
+    Interface for ABZ quadrature encoder  
+*/
+
 #define ENC_MAF_FILTER_LENGTH  10
 
 struct encoder_struct {

@@ -4,6 +4,27 @@
 #include "Arduino.h"
 #include "QuadratureEncoder.h"
 
+/*
+Author:
+    Lachlan Mares, lachlan.mares@adelaide.edu.au
+
+License:
+    ??    
+
+Description:
+    Interface for Texas Instruments DRV8825 Stepper motor driver and ABZ quadrature encoder  
+*/
+
+// I/O default startup state
+#define DEFAULT_DIRECTION LOW
+#define DEFAULT_STEP LOW
+#define DEFAULT_SLEEP HIGH
+#define DEFAULT_RESET HIGH
+#define DEFAULT_ENABLE LOW
+#define DEFAULT_M0 LOW
+#define DEFAULT_M1 LOW
+#define DEFAULT_M2 LOW
+
 // Status bits
 #define DIRECTION_BIT 0
 #define FAULT_BIT 1
@@ -27,7 +48,7 @@ struct motor_command_struct {
   bool use_ramping;
   uint8_t microstep;
   uint8_t job_id;
-  int ramp_scaler;
+  uint8_t ramp_scaler;
   unsigned long ramping_steps;
   unsigned long pulse_interval;
   unsigned long pulses;

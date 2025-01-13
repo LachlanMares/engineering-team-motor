@@ -1,5 +1,16 @@
 #!/usr/bin/env python3
 
+"""
+Author:
+    Lachlan Mares, lachlan.mares@adelaide.edu.au
+
+License:
+    ??
+
+Description:
+    ??
+"""
+
 from pathlib import Path
 
 

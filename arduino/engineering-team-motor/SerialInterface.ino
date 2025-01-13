@@ -171,6 +171,40 @@ void processCommandMessage(MotorInterface* motor_ptr, int bytes_read) {
                 }
       break;
 
+    case SEND_JOB_ALL_VARIABLES_WITH_RAMPING_AND_RATE:
+      response_buffer[2] = serial_buffer[3]; // Job id
+
+      if(motor_ptr->status_variables.fault) {
+        response_buffer[3] = MOTOR_IN_FAULT_RESPONSE;
+
+      } else if (!motor_ptr->status_variables.enabled) {
+          response_buffer[3] = MOTOR_DISABLED_RESPONSE;
+
+        } else if(motor_ptr->status_variables.running) {
+            response_buffer[3] = MOTOR_BUSY_RESPONSE;
+
+          } else if (motor_ptr->status_variables.sleep) {
+              response_buffer[3] = MOTOR_IN_SLEEP_RESPONSE;
+
+            } else if (bytes_read == 21) {
+                motor_ptr->command_variables.use_ramping = true;
+                motor_ptr->command_variables.direction = (serial_buffer[1] > 0) ? true : false;;
+                motor_ptr->command_variables.microstep = serial_buffer[2];
+                motor_ptr->command_variables.job_id = serial_buffer[3];
+                motor_ptr->command_variables.pulses = longFromBytes(&serial_buffer[4]);
+                motor_ptr->command_variables.pulse_interval = longFromBytes(&serial_buffer[8]);
+                motor_ptr->command_variables.pulse_on_period = longFromBytes(&serial_buffer[12]);
+                motor_ptr->command_variables.ramping_steps = longFromBytes(&serial_buffer[16]);
+                motor_ptr->command_variables.ramp_scaler = serial_buffer[20];
+                motor_ptr->StartJob();
+                response_buffer[3] = 0x00;
+                response_buffer[4] = ACK;                
+
+              } else {
+                  response_buffer[3] = BAD_JOB_COMMAND_RESPONSE;
+                }
+      break;
+
     case PAUSE_JOB:
         response_buffer[2] = serial_buffer[3]; // Job id
 

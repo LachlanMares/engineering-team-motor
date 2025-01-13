@@ -3,6 +3,17 @@
 
 #include "Arduino.h"
 
+/*
+Author:
+    Lachlan Mares, lachlan.mares@adelaide.edu.au
+
+License:
+    ??    
+
+Description:
+    Class for implementing AT style headers and acknowledgement to serial messages
+*/
+
 #define STX 0x02
 #define ETX 0x03
 #define ACK 0x06
