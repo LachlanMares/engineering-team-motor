@@ -1,6 +1,27 @@
 # Engineering Team Motor
-
 ![MotorAssembly.png](images%2FMotorAssembly.png)
+
+## Motor Controller PCB 
+![Schematic.png](images%2FSchematic.png)
+![PCB.png](images%2FPCB.png) 
+![PCB_Assembly.png](images%2FPCB_Assembly.png)
+
+### Microcontroller
+Microcontroller used is an Arduino RP2040
+![Arduino_RP2040.png](images%2FArduino_RP2040.png)
+https://au.mouser.com/ProductDetail/Arduino/ABX00052?qs=sGAEpiMZZMuqBwn8WqcFUipNgoezRlc4TyjmMe5QIz0GNOLAi4TKQQ%3D%3D
+
+### Stepper Motor Board:
+![DRV8824.png](images%2FDRV8824.png)
+https://www.pololu.com/product/2133
+
+### Stepper motor
+3D Printer Stepper Motor Model: 42BYGH34-1304B
+![Motor.png](images%2FMotor.png)
+
+### ABZ Quadrature Encoder
+600 PPR ABZ Quadrature Encoder model number C38S6G5-600Z 
+![Encoder.png](images%2FEncoder.png)
 
 ## Add User to dialout and TTY
 Add user to dialout and tty to use serial devices
@@ -190,4 +211,43 @@ Check /dev shows SYMLINK
 `ls`
 
 ![dev.png](images%2Fdev.png)
+
+## Python Interface
+Basic job example:
+
+```
+  from pathlib import Path
+  from motor import Motor
+  
+  project_dir = Path(__file__).resolve().parents[1]
+  header_file = project_dir / 'arduino/engineering-team-motor/definitions.h'
+
+  motor = Motor(definitions_filepath=header_file, serial_port='/dev/arduino_rp2040')
+  motor.start_threads()
+  motor.send_enable_motor()
+
+  try:
+    while True:
+      if motor.is_ready_for_job():
+        time.sleep(1)
+        motor.send_wake_motor()
+        motor.send_motor_rotations_at_set_rpm(number_or_rotations=1,
+                                              rpm=random.random() * 10,
+                                              direction=random.choice([True, False]),
+                                              job_id=1)
+   
+      else:
+        time.sleep(0.5)
+        print(f"{motor.get_rotor_position()=:.3f} radians")
+        print(motor.status_message_dict)
+    
+  except KeyboardInterrupt:
+    motor.stop()
+```
+
+### Job Types
+  send_motor_rotations_at_set_rpm\
+  send_motor_pulses_at_set_rpm\
+  send_motor_rotations\
+  goto_rotor_position_radians
 
